@@ -1,0 +1,972 @@
+SQL>
+SQL> @make_dim
+SQL> REM
+SQL> REM Small DIM table
+SQL> REM
+SQL> set timing on
+SQL> set linesize 250
+SQL> set tab off
+SQL> set trims on
+SQL> set echo on
+SQL>
+SQL> drop table dim1 purge;
+
+Table DIM1 dropped.
+
+Elapsed: 00:00:00.252
+SQL>
+SQL> create table dim1 (dnum number(10));
+
+Table DIM1 created.
+
+Elapsed: 00:00:00.030
+SQL>
+SQL> insert into dim1 values (13);
+
+1 row inserted.
+
+Elapsed: 00:00:00.131
+SQL> commit;
+
+Commit complete.
+
+Elapsed: 00:00:00.037
+SQL> exec dbms_stats.gather_table_stats(user,'dim1');
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:01.818
+Elapsed: 00:00:01.818
+SQL> @make_fact
+SQL> REM
+SQL> REM Fact table for demo statistics query answering
+SQL> REM
+SQL> set timing on
+SQL> set linesize 250
+SQL> set tab off
+SQL> set trims on
+SQL> set echo on
+SQL>
+SQL> drop table fact1 purge;
+
+Table FACT1 dropped.
+
+Elapsed: 00:00:00.782
+SQL> drop table fact1_source purge;
+
+Table FACT1_SOURCE dropped.
+
+Elapsed: 00:00:02.842
+SQL>
+SQL> --
+SQL> -- In this case we are using VARCHAR2(20)
+SQL> -- We have to keep the column under 64 bytes
+SQL> -- to answer aggregate queries on this column
+SQL> -- using stats.
+SQL> --
+SQL> create table fact1 (num0 number(10), num1 number(10), txt1 varchar2(20), txt2 varchar2(100), dt1 date);
+
+Table FACT1 created.
+
+Elapsed: 00:00:00.025
+SQL>
+SQL> create table fact1_source as
+  2  select * from fact1 where 1=-1;
+
+Table FACT1_SOURCE created.
+
+Elapsed: 00:00:00.057
+SQL>
+SQL> insert /*+ APPEND */ into fact1_source
+  2  select rownum,mod(rownum,10),'XXX'||rownum,'XXX'||rownum,sysdate-rownum
+  3  from   dual connect by rownum <= 10000;
+
+10,000 rows inserted.
+
+Elapsed: 00:00:02.718
+SQL>
+SQL> commit;
+
+Commit complete.
+
+Elapsed: 00:00:00.028
+SQL>
+SQL> --
+SQL> -- Insert rows into FACT1
+SQL> --
+SQL> insert /*+ APPEND */ into fact1 select num0,0,txt1,txt2,dt1 from fact1_source;
+
+10,000 rows inserted.
+
+Elapsed: 00:00:00.364
+SQL> commit;
+
+Commit complete.
+
+Elapsed: 00:00:00.028
+SQL>
+SQL> --
+SQL> -- Let's speed up row generation...
+SQL> --
+SQL> set autocommit on
+SQL> insert /*+ APPEND */ into fact1 select num0,1,txt1,txt2,dt1 from fact1;
+
+10,000 rows inserted.
+
+Commit complete.
+Elapsed: 00:00:07.877
+SQL> insert /*+ APPEND */ into fact1 select num0,2,txt1,txt2,dt1 from fact1;
+
+20,000 rows inserted.
+
+Commit complete.
+Elapsed: 00:00:01.364
+SQL> insert /*+ APPEND */ into fact1 select num0,3,txt1,txt2,dt1 from fact1;
+
+40,000 rows inserted.
+
+Commit complete.
+Elapsed: 00:00:05.360
+SQL> insert /*+ APPEND */ into fact1 select num0,4,txt1,txt2,dt1 from fact1;
+
+80,000 rows inserted.
+
+Commit complete.
+Elapsed: 00:00:06.652
+SQL> insert /*+ APPEND */ into fact1 select num0,5,txt1,txt2,dt1 from fact1;
+
+160,000 rows inserted.
+
+Commit complete.
+Elapsed: 00:00:04.121
+SQL> insert /*+ APPEND */ into fact1 select num0,6,txt1,txt2,dt1 from fact1;
+
+320,000 rows inserted.
+
+Commit complete.
+Elapsed: 00:00:03.094
+SQL> insert /*+ APPEND */ into fact1 select num0,7,txt1,txt2,dt1 from fact1;
+
+640,000 rows inserted.
+
+Commit complete.
+Elapsed: 00:00:03.825
+SQL> insert /*+ APPEND */ into fact1 select num0,8,txt1,txt2,dt1 from fact1;
+
+1,280,000 rows inserted.
+
+Commit complete.
+Elapsed: 00:00:04.745
+SQL> insert /*+ APPEND */ into fact1 select num0,9,txt1,txt2,dt1 from fact1;
+
+2,560,000 rows inserted.
+
+Commit complete.
+Elapsed: 00:00:07.879
+SQL> insert /*+ APPEND */ into fact1 select num0,10,txt1,txt2,dt1 from fact1;
+
+5,120,000 rows inserted.
+
+Commit complete.
+Elapsed: 00:00:27.001
+SQL> insert /*+ APPEND */ into fact1 select num0,11,txt1,txt2,dt1 from fact1;
+
+10,240,000 rows inserted.
+
+Commit complete.
+Elapsed: 00:00:25.398
+SQL> insert /*+ APPEND */ into fact1 select num0,12,txt1,txt2,dt1 from fact1;
+
+20,480,000 rows inserted.
+
+Commit complete.
+Elapsed: 00:00:53.038
+SQL> insert /*+ APPEND */ into fact1 select num0,13,txt1,txt2,dt1 from fact1;
+
+40,960,000 rows inserted.
+
+Commit complete.
+Elapsed: 00:01:35.368
+SQL> set autocommit off
+Elapsed: 00:01:35.368
+SQL> @test_stats
+SQL> set echo on
+SQL> set timing on
+SQL> set linesize 250
+SQL> set trims on
+SQL> column MAX(TXT1) format a30
+SQL> column MIN(TXT1) format a30
+SQL> column MAX(TXT2) format a30
+SQL> column MIN(TXT2) format a30
+SQL>
+SQL> alter session set statistics_level = 'ALL';
+
+Session altered.
+
+Elapsed: 00:00:00.019
+SQL>
+SQL> --
+SQL> -- The following queries use stats answering
+SQL> --
+SQL> select max(num0),min(num1) from fact1;
+
+ MAX(NUM0)  MIN(NUM1)
+---------- ----------
+     10000          0
+
+Elapsed: 00:00:00.436
+SQL> @plan
+SQL> set tab off
+SQL> SET LINESIZE 220
+SQL> SET PAGESIZE 500
+SQL> column plan_table_output format a190
+SQL> SELECT * FROM table(DBMS_XPLAN.DISPLAY_CURSOR(format=>'allstats last'));
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  3x0hnv3a17a0u, child number 0
+-------------------------------------
+select max(num0),min(num1) from fact1
+
+Plan hash value: 3013367878
+
+---------------------------------------------------------------------------------------------------------------------
+| Id  | Operation                    | Name                       | Starts | E-Rows | A-Rows |   A-Time   | Buffers |
+---------------------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT             |                            |      1 |        |      1 |00:00:00.01 |      20 |
+|   1 |  RESULT CACHE                | 3j7530z9gc3a77x30tq34zb709 |      1 |        |      1 |00:00:00.01 |      20 |
+|   2 |   VIEW                       | VW_SQT_65BBF4BE            |      0 |      1 |      0 |00:00:00.01 |       0 |
+|   3 |    SORT AGGREGATE            |                            |      0 |      1 |      0 |00:00:00.01 |       0 |
+|   4 |     TABLE ACCESS STORAGE FULL| FACT1                      |      0 |     81M|      0 |00:00:00.01 |       0 |
+---------------------------------------------------------------------------------------------------------------------
+
+Result Cache Information (identified by operation id):
+------------------------------------------------------
+
+   1 -
+
+Note
+-----
+   - automatic DOP: Computed Degree of Parallelism is 1
+
+
+25 rows selected.
+
+Elapsed: 00:00:00.146
+Elapsed: 00:00:00.146
+SQL> pause p...
+p...
+
+SQL>
+SQL> select max(num0),min(num1),min(txt1),max(txt1),count(*) from fact1;
+
+ MAX(NUM0)  MIN(NUM1) MIN(TXT1)                      MAX(TXT1)                        COUNT(*)
+---------- ---------- ------------------------------ ------------------------------ ----------
+     10000          0 XXX1                           XXX9999                          81920000
+
+Elapsed: 00:00:00.183
+SQL> @plan
+SQL> set tab off
+SQL> SET LINESIZE 220
+SQL> SET PAGESIZE 500
+SQL> column plan_table_output format a190
+SQL> SELECT * FROM table(DBMS_XPLAN.DISPLAY_CURSOR(format=>'allstats last'));
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  1zjjqqwsb9xtw, child number 0
+-------------------------------------
+select max(num0),min(num1),min(txt1),max(txt1),count(*) from fact1
+
+Plan hash value: 3013367878
+
+---------------------------------------------------------------------------------------------------------------------
+| Id  | Operation                    | Name                       | Starts | E-Rows | A-Rows |   A-Time   | Buffers |
+---------------------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT             |                            |      1 |        |      1 |00:00:00.01 |      37 |
+|   1 |  RESULT CACHE                | 8m37741dqv7x02wurjdp2gs9ru |      1 |        |      1 |00:00:00.01 |      37 |
+|   2 |   VIEW                       | VW_SQT_65BBF4BE            |      0 |      1 |      0 |00:00:00.01 |       0 |
+|   3 |    SORT AGGREGATE            |                            |      0 |      1 |      0 |00:00:00.01 |       0 |
+|   4 |     TABLE ACCESS STORAGE FULL| FACT1                      |      0 |     81M|      0 |00:00:00.01 |       0 |
+---------------------------------------------------------------------------------------------------------------------
+
+Result Cache Information (identified by operation id):
+------------------------------------------------------
+
+   1 -
+
+Note
+-----
+   - automatic DOP: Computed Degree of Parallelism is 1
+
+
+25 rows selected.
+
+Elapsed: 00:00:00.122
+Elapsed: 00:00:00.122
+SQL> pause p...
+p...
+
+SQL>
+SQL> select max(txt1),min(txt1),count(txt1) from fact1;
+
+MAX(TXT1)                      MIN(TXT1)                      COUNT(TXT1)
+------------------------------ ------------------------------ -----------
+XXX9999                        XXX1                              81920000
+
+Elapsed: 00:00:00.183
+SQL> @plan
+SQL> set tab off
+SQL> SET LINESIZE 220
+SQL> SET PAGESIZE 500
+SQL> column plan_table_output format a190
+SQL> SELECT * FROM table(DBMS_XPLAN.DISPLAY_CURSOR(format=>'allstats last'));
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  76xvnad5mkgdf, child number 0
+-------------------------------------
+select max(txt1),min(txt1),count(txt1) from fact1
+
+Plan hash value: 3013367878
+
+---------------------------------------------------------------------------------------------------------------------
+| Id  | Operation                    | Name                       | Starts | E-Rows | A-Rows |   A-Time   | Buffers |
+---------------------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT             |                            |      1 |        |      1 |00:00:00.01 |      30 |
+|   1 |  RESULT CACHE                | 36r9uwkr8bwgz5th4hs85pc8qy |      1 |        |      1 |00:00:00.01 |      30 |
+|   2 |   VIEW                       | VW_SQT_65BBF4BE            |      0 |      1 |      0 |00:00:00.01 |       0 |
+|   3 |    SORT AGGREGATE            |                            |      0 |      1 |      0 |00:00:00.01 |       0 |
+|   4 |     TABLE ACCESS STORAGE FULL| FACT1                      |      0 |     81M|      0 |00:00:00.01 |       0 |
+---------------------------------------------------------------------------------------------------------------------
+
+Result Cache Information (identified by operation id):
+------------------------------------------------------
+
+   1 -
+
+Note
+-----
+   - automatic DOP: Computed Degree of Parallelism is 1
+
+
+25 rows selected.
+
+Elapsed: 00:00:00.108
+Elapsed: 00:00:00.109
+SQL> pause p...
+p...
+
+SQL>
+SQL> --
+SQL> -- Selecting SYSDATE first because SQLCL executes
+SQL> -- a query to retrieve NLS information and we are not
+SQL> -- interested in seeing that query plan.
+SQL> --
+SQL> select sysdate from dual;
+
+SYSDATE
+---------
+02-APR-19
+
+Elapsed: 00:00:00.222
+SQL> select max(dt1) from fact1;
+
+MAX(DT1)
+---------
+01-APR-19
+
+Elapsed: 00:00:00.079
+SQL> @plan
+SQL> set tab off
+SQL> SET LINESIZE 220
+SQL> SET PAGESIZE 500
+SQL> column plan_table_output format a190
+SQL> SELECT * FROM table(DBMS_XPLAN.DISPLAY_CURSOR(format=>'allstats last'));
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  1gnjpd7q1d5ma, child number 0
+-------------------------------------
+select max(dt1) from fact1
+
+Plan hash value: 3013367878
+
+---------------------------------------------------------------------------------------------------------------------
+| Id  | Operation                    | Name                       | Starts | E-Rows | A-Rows |   A-Time   | Buffers |
+---------------------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT             |                            |      1 |        |      1 |00:00:00.01 |      14 |
+|   1 |  RESULT CACHE                | 7msg7yy8vrc4w4ruj6rpzdk47c |      1 |        |      1 |00:00:00.01 |      14 |
+|   2 |   VIEW                       | VW_SQT_65BBF4BE            |      0 |      1 |      0 |00:00:00.01 |       0 |
+|   3 |    SORT AGGREGATE            |                            |      0 |      1 |      0 |00:00:00.01 |       0 |
+|   4 |     TABLE ACCESS STORAGE FULL| FACT1                      |      0 |     81M|      0 |00:00:00.01 |       0 |
+---------------------------------------------------------------------------------------------------------------------
+
+Result Cache Information (identified by operation id):
+------------------------------------------------------
+
+   1 -
+
+Note
+-----
+   - automatic DOP: Computed Degree of Parallelism is 1
+
+
+25 rows selected.
+
+Elapsed: 00:00:00.093
+Elapsed: 00:00:00.093
+SQL> pause p...
+p...
+
+SQL>
+SQL> select approx_count_distinct(num1) from fact1;
+
+APPROX_COUNT_DISTINCT(NUM1)
+---------------------------
+                         14
+
+Elapsed: 00:00:00.070
+SQL> @plan
+SQL> set tab off
+SQL> SET LINESIZE 220
+SQL> SET PAGESIZE 500
+SQL> column plan_table_output format a190
+SQL> SELECT * FROM table(DBMS_XPLAN.DISPLAY_CURSOR(format=>'allstats last'));
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  g05pjsw2y6hvs, child number 0
+-------------------------------------
+select approx_count_distinct(num1) from fact1
+
+Plan hash value: 3013367878
+
+---------------------------------------------------------------------------------------------------------------------
+| Id  | Operation                    | Name                       | Starts | E-Rows | A-Rows |   A-Time   | Buffers |
+---------------------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT             |                            |      1 |        |      1 |00:00:00.01 |      13 |
+|   1 |  RESULT CACHE                | 8wvx9f2hxzxwm7c9zamyff81r7 |      1 |        |      1 |00:00:00.01 |      13 |
+|   2 |   VIEW                       | VW_SQT_65BBF4BE            |      0 |      1 |      0 |00:00:00.01 |       0 |
+|   3 |    SORT AGGREGATE APPROX     |                            |      0 |      1 |      0 |00:00:00.01 |       0 |
+|   4 |     TABLE ACCESS STORAGE FULL| FACT1                      |      0 |     81M|      0 |00:00:00.01 |       0 |
+---------------------------------------------------------------------------------------------------------------------
+
+Result Cache Information (identified by operation id):
+------------------------------------------------------
+
+   1 -
+
+Note
+-----
+   - automatic DOP: Computed Degree of Parallelism is 1
+
+
+25 rows selected.
+
+Elapsed: 00:00:00.086
+Elapsed: 00:00:00.088
+SQL> pause p...
+p...
+
+SQL>
+SQL> --
+SQL> -- The transformation can be used in more complex queries
+SQL> --
+SQL> select * from dim1 where dnum = (select max(num1) from fact1);
+
+      DNUM
+----------
+        13
+
+Elapsed: 00:00:00.050
+SQL> @plan
+SQL> set tab off
+SQL> SET LINESIZE 220
+SQL> SET PAGESIZE 500
+SQL> column plan_table_output format a190
+SQL> SELECT * FROM table(DBMS_XPLAN.DISPLAY_CURSOR(format=>'allstats last'));
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  271xpwgggk88w, child number 0
+-------------------------------------
+select * from dim1 where dnum = (select max(num1) from fact1)
+
+Plan hash value: 201498052
+
+----------------------------------------------------------------------------------------------------------------------
+| Id  | Operation                     | Name                       | Starts | E-Rows | A-Rows |   A-Time   | Buffers |
+----------------------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT              |                            |      1 |        |      1 |00:00:00.01 |      21 |
+|   1 |  RESULT CACHE                 | gkhcrcpt3anu36uqw6r9gxb28w |      1 |        |      1 |00:00:00.01 |      21 |
+|*  2 |   TABLE ACCESS STORAGE FULL   | DIM1                       |      1 |      1 |      1 |00:00:00.01 |      21 |
+|   3 |    VIEW                       | VW_SQT_EA69C9F1            |      0 |      1 |      0 |00:00:00.01 |       0 |
+|   4 |     SORT AGGREGATE            |                            |      0 |      1 |      0 |00:00:00.01 |       0 |
+|   5 |      TABLE ACCESS STORAGE FULL| FACT1                      |      0 |     81M|      0 |00:00:00.01 |       0 |
+----------------------------------------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   2 - storage("DNUM"=)
+       filter("DNUM"=)
+
+Result Cache Information (identified by operation id):
+------------------------------------------------------
+
+   1 -
+
+Note
+-----
+   - automatic DOP: Computed Degree of Parallelism is 1
+
+
+32 rows selected.
+
+Elapsed: 00:00:00.108
+Elapsed: 00:00:00.108
+SQL> pause p...
+p...
+
+SQL>
+SQL> --
+SQL> -- The following queries do not use stats query answering.
+SQL> --
+SQL>
+SQL> --
+SQL> -- Operating on the aggregate column
+SQL> --
+SQL> select max(num1)+1 from fact1 where num1 > 0;
+
+MAX(NUM1)+1
+-----------
+         14
+
+Elapsed: 00:00:01.640
+SQL> @plan
+SQL> set tab off
+SQL> SET LINESIZE 220
+SQL> SET PAGESIZE 500
+SQL> column plan_table_output format a190
+SQL> SELECT * FROM table(DBMS_XPLAN.DISPLAY_CURSOR(format=>'allstats last'));
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  2g53d6p99a575, child number 0
+-------------------------------------
+select max(num1)+1 from fact1 where num1 > 0
+
+Plan hash value: 4087791341
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+| Id  | Operation                   | Name                       | Starts | E-Rows | A-Rows |   A-Time   | Buffers | Reads  |  OMem |  1Mem | Used-Mem |
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT            |                            |      1 |        |      1 |00:00:01.61 |   20029 |  20026 |       |       |          |
+|   1 |  RESULT CACHE               | fyhsyu5u5dbzq9ndbj0a5rsun5 |      1 |        |      1 |00:00:01.61 |   20029 |  20026 |       |       |          |
+|   2 |   SORT AGGREGATE            |                            |      1 |      1 |      1 |00:00:01.61 |   20029 |  20026 |       |       |          |
+|*  3 |    TABLE ACCESS STORAGE FULL| FACT1                      |      1 |     81M|     42M|00:00:01.13 |   20029 |  20026 |  1025K|  1025K|   11M (0)|
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   3 - storage("NUM1">0)
+       filter("NUM1">0)
+
+Result Cache Information (identified by operation id):
+------------------------------------------------------
+
+   1 -
+
+Note
+-----
+   - automatic DOP: Computed Degree of Parallelism is 1
+
+
+30 rows selected.
+
+Elapsed: 00:00:00.086
+Elapsed: 00:00:00.093
+SQL> pause p...
+p...
+
+SQL>
+SQL> --
+SQL> -- WHERE clause
+SQL> --
+SQL> select max(num1) from fact1 where num1 > 0;
+
+ MAX(NUM1)
+----------
+        13
+
+Elapsed: 00:00:02.675
+SQL> @plan
+SQL> set tab off
+SQL> SET LINESIZE 220
+SQL> SET PAGESIZE 500
+SQL> column plan_table_output format a190
+SQL> SELECT * FROM table(DBMS_XPLAN.DISPLAY_CURSOR(format=>'allstats last'));
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  0rqq0xxkgzfyf, child number 0
+-------------------------------------
+select max(num1) from fact1 where num1 > 0
+
+Plan hash value: 4087791341
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+| Id  | Operation                   | Name                       | Starts | E-Rows | A-Rows |   A-Time   | Buffers | Reads  |  OMem |  1Mem | Used-Mem |
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT            |                            |      1 |        |      1 |00:00:02.65 |   20029 |  20026 |       |       |          |
+|   1 |  RESULT CACHE               | ackr2fccnhc3v5pha8yabcakax |      1 |        |      1 |00:00:02.65 |   20029 |  20026 |       |       |          |
+|   2 |   SORT AGGREGATE            |                            |      1 |      1 |      1 |00:00:02.65 |   20029 |  20026 |       |       |          |
+|*  3 |    TABLE ACCESS STORAGE FULL| FACT1                      |      1 |     81M|    977K|00:00:02.64 |   20029 |  20026 |  1025K|  1025K|   11M (0)|
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   3 - storage("NUM1">0)
+       filter("NUM1">0)
+
+Result Cache Information (identified by operation id):
+------------------------------------------------------
+
+   1 -
+
+Note
+-----
+   - automatic DOP: Computed Degree of Parallelism is 1
+
+
+30 rows selected.
+
+Elapsed: 00:00:00.062
+Elapsed: 00:00:00.069
+SQL> pause p...
+p...
+
+SQL>
+SQL> --
+SQL> -- TXT2 column is VARCHAR2(100) - too wide
+SQL> --
+SQL> select min(txt2), max(txt2) from fact1;
+
+MIN(TXT2)                      MAX(TXT2)
+------------------------------ ------------------------------
+XXX1                           XXX9999
+
+Elapsed: 00:00:03.468
+SQL> @plan
+SQL> set tab off
+SQL> SET LINESIZE 220
+SQL> SET PAGESIZE 500
+SQL> column plan_table_output format a190
+SQL> SELECT * FROM table(DBMS_XPLAN.DISPLAY_CURSOR(format=>'allstats last'));
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  a19svh2shq0x2, child number 0
+-------------------------------------
+select min(txt2), max(txt2) from fact1
+
+Plan hash value: 4087791341
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+| Id  | Operation                   | Name                       | Starts | E-Rows | A-Rows |   A-Time   | Buffers | Reads  |  OMem |  1Mem | Used-Mem |
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT            |                            |      1 |        |      1 |00:00:03.43 |   20029 |  20026 |       |       |          |
+|   1 |  RESULT CACHE               | ad9g1zw77h4ru5jsusuzu72t7r |      1 |        |      1 |00:00:03.43 |   20029 |  20026 |       |       |          |
+|   2 |   SORT AGGREGATE            |                            |      1 |      1 |      1 |00:00:03.43 |   20029 |  20026 |       |       |          |
+|   3 |    TABLE ACCESS STORAGE FULL| FACT1                      |      1 |     81M|     81M|00:00:00.56 |   20029 |  20026 |  1025K|  1025K|   11M (0)|
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Result Cache Information (identified by operation id):
+------------------------------------------------------
+
+   1 -
+
+Note
+-----
+   - automatic DOP: Computed Degree of Parallelism is 1
+
+
+24 rows selected.
+
+Elapsed: 00:00:00.326
+Elapsed: 00:00:00.326
+SQL> pause p...
+p...
+
+SQL>
+SQL> --
+SQL> -- Not a supported aggregate
+SQL> --
+SQL> select sum(num1) from fact1;
+
+ SUM(NUM1)
+----------
+ 983050000
+
+Elapsed: 00:00:01.894
+SQL> @plan
+SQL> set tab off
+SQL> SET LINESIZE 220
+SQL> SET PAGESIZE 500
+SQL> column plan_table_output format a190
+SQL> SELECT * FROM table(DBMS_XPLAN.DISPLAY_CURSOR(format=>'allstats last'));
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  2xdrfdubucvqd, child number 0
+-------------------------------------
+select sum(num1) from fact1
+
+Plan hash value: 4087791341
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+| Id  | Operation                   | Name                       | Starts | E-Rows | A-Rows |   A-Time   | Buffers | Reads  |  OMem |  1Mem | Used-Mem |
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT            |                            |      1 |        |      1 |00:00:01.87 |   20029 |  20026 |       |       |          |
+|   1 |  RESULT CACHE               | 45us1m8n8s4xw67pxvwa18j995 |      1 |        |      1 |00:00:01.87 |   20029 |  20026 |       |       |          |
+|   2 |   SORT AGGREGATE            |                            |      1 |      1 |      1 |00:00:01.87 |   20029 |  20026 |       |       |          |
+|   3 |    TABLE ACCESS STORAGE FULL| FACT1                      |      1 |     81M|    987K|00:00:01.83 |   20029 |  20026 |  1025K|  1025K|   11M (0)|
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Result Cache Information (identified by operation id):
+------------------------------------------------------
+
+   1 -
+
+Note
+-----
+   - automatic DOP: Computed Degree of Parallelism is 1
+
+
+24 rows selected.
+
+Elapsed: 00:00:00.067
+Elapsed: 00:00:00.067
+SQL> pause p...
+p...
+
+SQL>
+SQL> --
+SQL> -- Incidentally, the result cache helps us
+SQL> -- out instead. If the query is executed a
+SQL> -- second time, we can get the result from cache.
+SQL> --
+SQL> select sum(num1) from fact1;
+
+ SUM(NUM1)
+----------
+ 983050000
+
+Elapsed: 00:00:00.033
+SQL> @plan
+SQL> set tab off
+SQL> SET LINESIZE 220
+SQL> SET PAGESIZE 500
+SQL> column plan_table_output format a190
+SQL> SELECT * FROM table(DBMS_XPLAN.DISPLAY_CURSOR(format=>'allstats last'));
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  2xdrfdubucvqd, child number 0
+-------------------------------------
+select sum(num1) from fact1
+
+Plan hash value: 4087791341
+
+-------------------------------------------------------------------------------------------------------------------------------------
+| Id  | Operation                   | Name                       | Starts | E-Rows | A-Rows |   A-Time   |  OMem |  1Mem | Used-Mem |
+-------------------------------------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT            |                            |      1 |        |      1 |00:00:00.01 |       |       |          |
+|   1 |  RESULT CACHE               | 45us1m8n8s4xw67pxvwa18j995 |      1 |        |      1 |00:00:00.01 |       |       |          |
+|   2 |   SORT AGGREGATE            |                            |      0 |      1 |      0 |00:00:00.01 |       |       |          |
+|   3 |    TABLE ACCESS STORAGE FULL| FACT1                      |      0 |     81M|      0 |00:00:00.01 |  1025K|  1025K|   11M (0)|
+-------------------------------------------------------------------------------------------------------------------------------------
+
+Result Cache Information (identified by operation id):
+------------------------------------------------------
+
+   1 -
+
+Note
+-----
+   - automatic DOP: Computed Degree of Parallelism is 1
+
+
+24 rows selected.
+
+Elapsed: 00:00:00.074
+Elapsed: 00:00:00.074
+SQL> pause p...
+p...
+
+SQL>
+SQL> --
+SQL> -- Not a simple column aggregate
+SQL> --
+SQL> select max(num1+10) from fact1;
+
+MAX(NUM1+10)
+------------
+          23
+
+Elapsed: 00:00:03.916
+SQL> @plan
+SQL> set tab off
+SQL> SET LINESIZE 220
+SQL> SET PAGESIZE 500
+SQL> column plan_table_output format a190
+SQL> SELECT * FROM table(DBMS_XPLAN.DISPLAY_CURSOR(format=>'allstats last'));
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  790j5tmk17my6, child number 0
+-------------------------------------
+select max(num1+10) from fact1
+
+Plan hash value: 4087791341
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+| Id  | Operation                   | Name                       | Starts | E-Rows | A-Rows |   A-Time   | Buffers | Reads  |  OMem |  1Mem | Used-Mem |
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT            |                            |      1 |        |      1 |00:00:03.89 |   20029 |  20026 |       |       |          |
+|   1 |  RESULT CACHE               | b6qcwpx9944g476zjxt1r8s77h |      1 |        |      1 |00:00:03.89 |   20029 |  20026 |       |       |          |
+|   2 |   SORT AGGREGATE            |                            |      1 |      1 |      1 |00:00:03.89 |   20029 |  20026 |       |       |          |
+|   3 |    TABLE ACCESS STORAGE FULL| FACT1                      |      1 |     81M|    987K|00:00:03.85 |   20029 |  20026 |  1025K|  1025K|   11M (0)|
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Result Cache Information (identified by operation id):
+------------------------------------------------------
+
+   1 -
+
+Note
+-----
+   - automatic DOP: Computed Degree of Parallelism is 1
+
+
+24 rows selected.
+
+Elapsed: 00:00:00.077
+Elapsed: 00:00:00.077
+SQL> pause p...
+p...
+
+SQL>
+SQL> --
+SQL> -- Let's get a baseline elapsed time for this query
+SQL> --
+SQL> select /* RUN1 */ max(num0),min(num0),min(num1),max(num1) from fact1;
+
+ MAX(NUM0)  MIN(NUM0)  MIN(NUM1)  MAX(NUM1)
+---------- ---------- ---------- ----------
+     10000          1          0         13
+
+Elapsed: 00:00:00.186
+SQL> -- Note the short elapsed time because we are using stats
+SQL> pause p...
+p...
+
+SQL>
+SQL> --
+SQL> -- DML prevents us from using stats to answer our query
+SQL> -- so we'll insert a row and re-try the "RUN1" query again.
+SQL> -- I'm using a different comment (RUN2) to change the query text so we
+SQL> -- get a new query in the cursor cache. It's the same query though
+SQL> -- of course.
+SQL> --
+SQL> insert into fact1 values (1,1,'XXX1','XXX1',sysdate);
+
+1 row inserted.
+
+Elapsed: 00:00:00.217
+SQL> commit;
+
+Commit complete.
+
+Elapsed: 00:00:00.018
+SQL> select /* RUN2 */ max(num0),min(num0),min(num1),max(num1) from fact1;
+
+ MAX(NUM0)  MIN(NUM0)  MIN(NUM1)  MAX(NUM1)
+---------- ---------- ---------- ----------
+     10000          1          0         13
+
+Elapsed: 00:00:02.513
+SQL> -- The DML has prevented us from using stats and this is
+SQL> -- reflected in the longer elapsed time.
+SQL> pause p...
+p...
+
+SQL>
+SQL> select /* RUN3 */ max(num0),min(num0),min(num1),max(num1) from fact1;
+
+ MAX(NUM0)  MIN(NUM0)  MIN(NUM1)  MAX(NUM1)
+---------- ---------- ---------- ----------
+     10000          1          0         13
+
+Elapsed: 00:00:03.130
+SQL> @plan
+SQL> set tab off
+SQL> SET LINESIZE 220
+SQL> SET PAGESIZE 500
+SQL> column plan_table_output format a190
+SQL> SELECT * FROM table(DBMS_XPLAN.DISPLAY_CURSOR(format=>'allstats last'));
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  dm9mw5035bvtg, child number 0
+-------------------------------------
+select /* RUN3 */ max(num0),min(num0),min(num1),max(num1) from fact1
+
+Plan hash value: 3013367878
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+| Id  | Operation                    | Name                       | Starts | E-Rows | A-Rows |   A-Time   | Buffers | Reads  |  OMem |  1Mem | Used-Mem |
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT             |                            |      1 |        |      1 |00:00:02.96 |   20054 |  20042 |       |       |          |
+|   1 |  RESULT CACHE                | b824tt4ruccx08stwznp224qtx |      1 |        |      1 |00:00:02.96 |   20054 |  20042 |       |       |          |
+|   2 |   VIEW                       | VW_SQT_65BBF4BE            |      1 |      1 |      1 |00:00:02.96 |   20050 |  20042 |       |       |          |
+|   3 |    SORT AGGREGATE            |                            |      1 |      1 |      1 |00:00:02.96 |   20050 |  20042 |       |       |          |
+|   4 |     TABLE ACCESS STORAGE FULL| FACT1                      |      1 |     81M|    987K|00:00:02.92 |   20050 |  20042 |  1025K|  1025K|   11M (0)|
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Result Cache Information (identified by operation id):
+------------------------------------------------------
+
+   1 -
+
+Note
+-----
+   - automatic DOP: Computed Degree of Parallelism is 1
+
+
+25 rows selected.
+
+Elapsed: 00:00:00.090
+Elapsed: 00:00:00.091
+SQL> -- The plan reflects that stats query answering is POSSIBLE.
+SQL> -- In this case it could not be used because of the DML and this
+SQL> -- is reflected in the longer elapsed time (than the
+SQL> -- RUN1 example above).
+SQL> pause p...
+p...
+
+SQL>
+SQL> --
+SQL> -- Get stats back up to date
+SQL> --
+SQL> exec dbms_stats.gather_table_stats(user,'FACT1');
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:01:58.374
+Elapsed: 00:01:58.374
+SQL>
+SQL> spool off
