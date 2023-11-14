@@ -1,0 +1,176 @@
+SQL> @example1
+SQL> alter session set "_bloom_filter_enabled"=false;
+
+Session altered.
+
+SQL> drop table products purge;
+
+Table dropped.
+
+SQL> drop table sources purge;
+
+Table dropped.
+
+SQL> 
+SQL> create table products (p_category varchar2(100), tpmethod varchar2(100), prod_category varchar2(100), method_typ varchar2(100),scid varchar2(10), tp varchar2(100));
+
+Table created.
+
+SQL> create table sources (p_category varchar2(100), tpmethod varchar2(100), scid varchar2(100),carrier varchar2(100), s_area char(4));
+
+Table created.
+
+SQL> 
+SQL> create index prod_cat_idx on products(prod_category);
+
+Index created.
+
+SQL> create index prod_mtyp_idx on products(method_typ);
+
+Index created.
+
+SQL> create index src_carr_idx on sources(carrier);
+
+Index created.
+
+SQL> create index s_area_idx on sources (s_area);
+
+Index created.
+
+SQL> 
+SQL> insert into products values('A','B','C','D','E','F');
+
+1 row created.
+
+SQL> insert into sources values('A','B','C','D',1);
+
+1 row created.
+
+SQL> 
+SQL> begin
+  2    for i in 1..10
+  3    loop
+  4       insert into products select * from products;
+  5       insert into sources select p_category,tpmethod,scid,rownum*i,i from sources;
+  6    end loop;
+  7  end;
+  8  /
+
+PL/SQL procedure successfully completed.
+
+SQL> commit;
+
+Commit complete.
+
+SQL> 
+SQL> exec dbms_stats.gather_table_Stats(user,'sources')
+
+PL/SQL procedure successfully completed.
+
+SQL> exec dbms_stats.gather_table_Stats(user,'products')
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> var bind1 number
+SQL> 
+SQL> exec :bind1 := 1
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> select t1.p_category, t2.tpmethod
+  2  from products t1, products t2
+  3  where t1.prod_category || '_1' = 'SFD_1'
+  4  and   t2.method_typ != 'SEA'
+  5  union
+  6  select t3.p_category, t4.tpmethod
+  7  from products t3, sources t4
+  8  where t3.scid = t4.scid
+  9  and   t4.carrier   = 'AAC'
+ 10  and   t4.s_area    = :bind1;
+
+no rows selected
+
+SQL> 
+SQL> set linesize 200
+SQL> set tab off
+SQL> set trims on
+SQL> set pagesize 1000
+SQL> column plan_table_output format a180
+SQL> 
+SQL> SELECT *
+  2  FROM table(DBMS_XPLAN.DISPLAY_CURSOR());
+
+PLAN_TABLE_OUTPUT
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  6dpwxu7svjyaf, child number 0
+-------------------------------------
+select t1.p_category, t2.tpmethod from products t1, products t2 where
+t1.prod_category || '_1' = 'SFD_1' and   t2.method_typ != 'SEA' union
+select t3.p_category, t4.tpmethod from products t3, sources t4 where
+t3.scid = t4.scid and   t4.carrier   = 'AAC' and   t4.s_area    = :bind1
+
+Plan hash value: 2854330949
+
+-------------------------------------------------------------------------------------------------------
+| Id  | Operation                              | Name         | Rows  | Bytes | Cost (%CPU)| Time     |
+-------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT                       |              |       |       |    24 (100)|          |
+|   1 |  HASH UNIQUE                           |              | 10477 | 83826 |    24   (5)| 00:00:01 |
+|   2 |   UNION-ALL                            |              | 10477 | 83826 |    24   (5)| 00:00:01 |
+|   3 |    MERGE JOIN CARTESIAN                |              | 10476 | 83808 |    18   (0)| 00:00:01 |
+|*  4 |     TABLE ACCESS FULL                  | PRODUCTS     |    10 |    40 |     3   (0)| 00:00:01 |
+|   5 |     BUFFER SORT                        |              |  1023 |  4092 |    15   (0)| 00:00:01 |
+|*  6 |      TABLE ACCESS FULL                 | PRODUCTS     |  1023 |  4092 |     2   (0)| 00:00:01 |
+|*  7 |    HASH JOIN                           |              |     1 |    18 |     5   (0)| 00:00:01 |
+|*  8 |     TABLE ACCESS BY INDEX ROWID BATCHED| SOURCES      |     1 |    14 |     2   (0)| 00:00:01 |
+|*  9 |      INDEX RANGE SCAN                  | SRC_CARR_IDX |     1 |       |     1   (0)| 00:00:01 |
+|  10 |     TABLE ACCESS FULL                  | PRODUCTS     |  1024 |  4096 |     3   (0)| 00:00:01 |
+-------------------------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   4 - filter("T1"."PROD_CATEGORY"||'_1'='SFD_1')
+   6 - filter("T2"."METHOD_TYP"<>'SEA')
+   7 - access("T3"."SCID"="T4"."SCID")
+   8 - filter(TO_NUMBER("T4"."S_AREA")=:BIND1)
+   9 - access("T4"."CARRIER"='AAC')
+
+SQL Analysis Report (identified by operation id/Query Block Name/Object Alias):
+-------------------------------------------------------------------------------
+
+   1 -  SET$1
+           -  The query block contains UNION which may be expensive.
+              Consider using UNION ALL if duplicates are allowed or
+              uniqueness is guaranteed.
+
+   3 -  SEL$1
+           -  The query block has 1 cartesian product which may be
+              expensive. Consider adding join conditions or removing the
+              disconnected tables or views.
+
+   4 -  SEL$1 / "T1"@"SEL$1"
+           -  The following columns have predicates which preclude their
+              use as keys in index range scan. Consider rewriting the
+              predicates.
+                "PROD_CATEGORY"
+
+   6 -  SEL$1 / "T2"@"SEL$1"
+           -  The following columns have predicates which preclude their
+              use as keys in index range scan. Consider rewriting the
+              predicates.
+                "METHOD_TYP"
+
+   8 -  SEL$2 / "T4"@"SEL$2"
+           -  The following columns have predicates which preclude their
+              use as keys in index range scan. Consider rewriting the
+              predicates.
+                "S_AREA"
+
+
+65 rows selected.
+
+SQL> 
+SQL> spool off

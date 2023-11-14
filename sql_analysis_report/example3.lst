@@ -1,0 +1,22 @@
+SQL> @example3
+SQL> --
+SQL> -- Locate problem SQL statements in the cursor cache
+SQL> --
+SQL> column sql_text format a170
+SQL> 
+SQL> select distinct sql_id,child_number,sql_text
+  2  from  v$sql a,
+  3        table(DBMS_XPLAN.DISPLAY_CURSOR(sql_id=>a.sql_id)) b
+  4  where b.plan_table_output like '%use as keys in index range scan%'
+  5  and   sql_text like '%products%'
+  6  order by sql_id,child_number
+  7  /
+
+SQL_ID        CHILD_NUMBER SQL_TEXT
+------------- ------------ --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+6dpwxu7svjyaf            0 select t1.p_category, t2.tpmethod from products t1, products t2 where t1.prod_category || '_1' = 'SFD_1' and   t2.method_typ != 'SEA' union select t3.p_category, t4.tpmet
+                           hod from products t3, sources t4 where t3.scid = t4.scid and   t4.carrier   = 'AAC' and   t4.s_area    = :bind1
+
+6drrgyb7cfpjy            0 select t3.p_category, t4.tpmethod from products t3, sources t4 where t3.scid = t4.scid and   t4.carrier   = 'AAC' and   t4.s_area    = :bind1
+
+SQL> spool off
