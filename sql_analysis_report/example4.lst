@@ -1,0 +1,242 @@
+SQL> @example4
+
+Table dropped.
+
+
+Table dropped.
+
+
+Table created.
+
+
+Table created.
+
+
+Index created.
+
+
+Index created.
+
+
+Index created.
+
+
+Index created.
+
+
+1 row created.
+
+
+1 row created.
+
+
+PL/SQL procedure successfully completed.
+
+
+Commit complete.
+
+
+PL/SQL procedure successfully completed.
+
+
+PL/SQL procedure successfully completed.
+
+
+PL/SQL procedure successfully completed.
+
+LIKE example that can't be used in a range scan
+
+no rows selected
+
+
+PLAN_TABLE_OUTPUT
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  916vup2ka96zd, child number 0
+-------------------------------------
+select t3.p_category, t4.tpmethod from products t3, sources t4 where
+t3.scid = t4.scid and   t4.carrier   like '%X%'
+
+Plan hash value: 4237101288
+
+-------------------------------------------------------------------------------
+| Id  | Operation          | Name     | Rows  | Bytes | Cost (%CPU)| Time     |
+-------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT   |          |       |       |     6 (100)|          |
+|*  1 |  HASH JOIN         |          |     1 |    13 |     6   (0)| 00:00:01 |
+|*  2 |   TABLE ACCESS FULL| SOURCES  |    51 |   459 |     3   (0)| 00:00:01 |
+|   3 |   TABLE ACCESS FULL| PRODUCTS |  1024 |  4096 |     3   (0)| 00:00:01 |
+-------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   1 - access("T3"."SCID"="T4"."SCID")
+   2 - filter(("T4"."CARRIER" LIKE '%X%' AND "T4"."CARRIER" IS NOT
+              NULL))
+
+SQL Analysis Report (identified by operation id/Query Block Name/Object Alias):
+-------------------------------------------------------------------------------
+
+   2 -  SEL$1 / "T4"@"SEL$1"
+           -  The following columns have predicates which preclude their
+              use as keys in index range scan. Consider rewriting the
+              predicates.
+                "CARRIER"
+
+
+32 rows selected.
+
+Can be used in range scan
+
+no rows selected
+
+
+PLAN_TABLE_OUTPUT
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  90ztpv3ayf1bq, child number 0
+-------------------------------------
+select t3.p_category, t4.tpmethod from products t3, sources t4 where
+t3.scid = t4.scid and   t4.carrier   like 'X%'
+
+Plan hash value: 1550259168
+
+-----------------------------------------------------------------------------------------------------
+| Id  | Operation                            | Name         | Rows  | Bytes | Cost (%CPU)| Time     |
+-----------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT                     |              |       |       |     6 (100)|          |
+|*  1 |  HASH JOIN                           |              |     1 |    13 |     6   (0)| 00:00:01 |
+|   2 |   TABLE ACCESS BY INDEX ROWID BATCHED| SOURCES      |     1 |     9 |     3   (0)| 00:00:01 |
+|*  3 |    INDEX RANGE SCAN                  | SRC_CARR_IDX |     1 |       |     2   (0)| 00:00:01 |
+|   4 |   TABLE ACCESS FULL                  | PRODUCTS     |  1024 |  4096 |     3   (0)| 00:00:01 |
+-----------------------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   1 - access("T3"."SCID"="T4"."SCID")
+   3 - access("T4"."CARRIER" LIKE 'X%')
+       filter("T4"."CARRIER" LIKE 'X%')
+
+
+24 rows selected.
+
+Works with bind values too
+
+no rows selected
+
+
+PLAN_TABLE_OUTPUT
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  ajwgxpvnxwy7n, child number 0
+-------------------------------------
+select t3.p_category, t4.tpmethod from products t3, sources t4 where
+t3.scid = t4.scid and   t4.carrier   like :bind1
+
+Plan hash value: 4237101288
+
+-------------------------------------------------------------------------------
+| Id  | Operation          | Name     | Rows  | Bytes | Cost (%CPU)| Time     |
+-------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT   |          |       |       |     6 (100)|          |
+|*  1 |  HASH JOIN         |          |     1 |    13 |     6   (0)| 00:00:01 |
+|*  2 |   TABLE ACCESS FULL| SOURCES  |    51 |   459 |     3   (0)| 00:00:01 |
+|   3 |   TABLE ACCESS FULL| PRODUCTS |  1024 |  4096 |     3   (0)| 00:00:01 |
+-------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   1 - access("T3"."SCID"="T4"."SCID")
+   2 - filter("T4"."CARRIER" LIKE :BIND1)
+
+SQL Analysis Report (identified by operation id/Query Block Name/Object Alias):
+-------------------------------------------------------------------------------
+
+   2 -  SEL$1 / "T4"@"SEL$1"
+           -  The following columns have predicates which preclude their
+              use as keys in index range scan. Consider rewriting the
+              predicates.
+                "CARRIER"
+
+
+31 rows selected.
+
+Sees previous bind value (no reparse): '%X%'
+
+PL/SQL procedure successfully completed.
+
+
+no rows selected
+
+
+PLAN_TABLE_OUTPUT
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  ajwgxpvnxwy7n, child number 0
+-------------------------------------
+select t3.p_category, t4.tpmethod from products t3, sources t4 where
+t3.scid = t4.scid and   t4.carrier   like :bind1
+
+Plan hash value: 4237101288
+
+-------------------------------------------------------------------------------
+| Id  | Operation          | Name     | Rows  | Bytes | Cost (%CPU)| Time     |
+-------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT   |          |       |       |     6 (100)|          |
+|*  1 |  HASH JOIN         |          |     1 |    13 |     6   (0)| 00:00:01 |
+|*  2 |   TABLE ACCESS FULL| SOURCES  |    51 |   459 |     3   (0)| 00:00:01 |
+|   3 |   TABLE ACCESS FULL| PRODUCTS |  1024 |  4096 |     3   (0)| 00:00:01 |
+-------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   1 - access("T3"."SCID"="T4"."SCID")
+   2 - filter("T4"."CARRIER" LIKE :BIND1)
+
+SQL Analysis Report (identified by operation id/Query Block Name/Object Alias):
+-------------------------------------------------------------------------------
+
+   2 -  SEL$1 / "T4"@"SEL$1"
+           -  The following columns have predicates which preclude their
+              use as keys in index range scan. Consider rewriting the
+              predicates.
+                "CARRIER"
+
+
+31 rows selected.
+
+Sees new bind value (new SQL statement parsed): 'X%'
+
+no rows selected
+
+
+PLAN_TABLE_OUTPUT
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  cmxsmzp3agbus, child number 0
+-------------------------------------
+select /* 2 */ t3.p_category, t4.tpmethod from products t3, sources t4
+where t3.scid = t4.scid and   t4.carrier   like :bind1
+
+Plan hash value: 1550259168
+
+-----------------------------------------------------------------------------------------------------
+| Id  | Operation                            | Name         | Rows  | Bytes | Cost (%CPU)| Time     |
+-----------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT                     |              |       |       |     6 (100)|          |
+|*  1 |  HASH JOIN                           |              |     1 |    13 |     6   (0)| 00:00:01 |
+|   2 |   TABLE ACCESS BY INDEX ROWID BATCHED| SOURCES      |     1 |     9 |     3   (0)| 00:00:01 |
+|*  3 |    INDEX RANGE SCAN                  | SRC_CARR_IDX |     1 |       |     2   (0)| 00:00:01 |
+|   4 |   TABLE ACCESS FULL                  | PRODUCTS     |  1024 |  4096 |     3   (0)| 00:00:01 |
+-----------------------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   1 - access("T3"."SCID"="T4"."SCID")
+   3 - access("T4"."CARRIER" LIKE :BIND1)
+       filter("T4"."CARRIER" LIKE :BIND1)
+
+
+24 rows selected.
+
+SQL> spool off

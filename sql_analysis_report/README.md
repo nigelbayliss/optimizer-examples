@@ -1,6 +1,6 @@
 # SQL Analysis Report Example
 
-Run examples is order - example1.sql, example2.sql and example3.sql
+Run examples is order - example1.sql, example2.sql, example3.sql and example4.sql
 
 See the spool (LST) files for example output.
 
