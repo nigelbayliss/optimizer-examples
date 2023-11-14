@@ -4,6 +4,8 @@ Run examples is order - example1.sql, example2.sql and example3.sql
 
 See the spool (LST) files for example output.
 
+There is a [blog post](https://blogs.oracle.com/optimizer/post/sql-analysis-report-in-23c-free) on this topic.
+
 ### DISCLAIMER:
 - These scripts are provided for educational purposes only.
 - They are NOT supported by Oracle World Wide Technical Support.
