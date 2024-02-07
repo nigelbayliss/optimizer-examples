@@ -1,6 +1,4 @@
 
-@tcb_adb_exp.sql g0kv57xsn6m58
-
 whenever sqlerror exit
 
 --
