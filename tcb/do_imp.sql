@@ -1,5 +1,3 @@
-connect tcb_dba/tcb_dba
-
 whenever sqlerror exit
 --
 -- Drop preexisting SPM staging table

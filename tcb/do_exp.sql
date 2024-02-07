@@ -1,5 +1,3 @@
-connect tcb_dba/tcb_dba
-
 whenever sqlerror exit
 
 --
@@ -11,11 +9,11 @@ host mkdir /tmp/TCB
 create or replace directory TCB_EXPORT_LOCATION as '/tmp/TCB';
 
 --
--- The relevant SQL_ID here
+-- Retrieve parameter number 1 - the SQL ID
 -- In this case, the statement must be in cursor cache
 --
 var sqlid varchar2(50)
-exec :sqlid := '7tycj7v5dzz5m';
+exec :sqlid := '&1';
 --
 -- Drop preexisting SPM staging table
 --
@@ -45,21 +43,24 @@ declare
   sig_exact number;
   handle varchar2(30);
   n number;
+  cursor c1 is 
+     select sql_handle
+     into   handle
+     from   dba_sql_plan_baselines
+     where  signature = sig_exact
+     and    rownum < 2;
 begin
   select dbms_sqltune.sqltext_to_signature(sql_fulltext)
   into   sig_exact
   from   v$sqlarea
   where  sql_id = :sqlid;
 
-  select sql_handle
-  into   handle
-  from   dba_sql_plan_baselines
-  where  signature = sig_exact
-  and    rownum < 2;
-
-  dbms_spm.create_stgtab_baseline('my_spm_staging_tab',null,'SYSAUX');
-  n := dbms_spm.pack_stgtab_baseline('my_spm_staging_tab',sql_handle=>handle);
-  dbms_output.put_line('Exported '||n||' SQL plan baselines');
+  for rec in c1
+  loop
+     dbms_spm.create_stgtab_baseline('my_spm_staging_tab',null,'SYSAUX');
+     n := dbms_spm.pack_stgtab_baseline('my_spm_staging_tab',sql_handle=>handle);
+     dbms_output.put_line('Exported '||n||' SQL plan baselines');
+  end loop;
 end;
 /
 set serveroutput off
@@ -100,6 +101,10 @@ begin
 end;
 / 
 
-prompt SPM staging table...
-select count(*) from my_spm_staging_tab;
+begin
+  execute immediate 'drop table my_spm_staging_tab';
+exception 
+  when others then null;
+end;
+/
 
