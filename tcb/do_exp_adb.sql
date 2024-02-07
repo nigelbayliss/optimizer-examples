@@ -64,11 +64,14 @@ declare
   tc clob;
 begin
 -- Directory name must be in upper case
+-- We'll export into a ZIP file for ease of use
   dbms_sqldiag.export_sql_testcase(directory=>'SQL_TCB_DIR'      
                                   ,sql_id=>:sqlid
                                   ,testcase=>tc
                                   ,preserveSchemaMapping=>true
-                                  ,testcase_name=>'mytestcase');
+                                  ,testcase_name=>'mytestcase'
+                                  ,ctrlOptions=>'<parameter name="compress">yes</parameter>');
+
 end;
 /
 --
