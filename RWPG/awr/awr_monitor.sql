@@ -1,3 +1,8 @@
+--
+--
+-- Export AWR repository and SQL Monitor data to import into another database for analysis
+--
+--
 create or replace PACKAGE ADW_MONITOR AS
 /* This script will export the awr data and associated sqlmonitor reports to a RWP cloud object store 
 You can invoke it in three ways:
