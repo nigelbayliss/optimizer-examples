@@ -1,0 +1,198 @@
+SQL> @example
+Connected.
+old   1: alter session set container = &container
+new   1: alter session set container = cdb1_pdb1
+
+Session altered.
+
+
+User dropped.
+
+
+User dropped.
+
+
+Grant succeeded.
+
+
+Grant succeeded.
+
+Connected.
+
+Table dropped.
+
+
+Table dropped.
+
+
+Table created.
+
+
+Table created.
+
+
+View created.
+
+
+View created.
+
+
+Grant succeeded.
+
+
+Grant succeeded.
+
+
+Grant succeeded.
+
+
+Grant succeeded.
+
+Connected.
+
+Function created.
+
+====
+==== NO view merging is allowed by default
+====
+
+Explained.
+
+
+PLAN_TABLE_OUTPUT                                 
+--------------------------------------------------
+Plan hash value: 3065742187                       
+                                                  
+--------------------------------------            
+| Id  | Operation           | Name   |            
+--------------------------------------            
+|   0 | SELECT STATEMENT    |        |            
+|   1 |  HASH JOIN          |        |            
+|   2 |   VIEW              | D_VIEW |            
+|   3 |    TABLE ACCESS FULL| DEPT   |            
+|   4 |   VIEW              | E_VIEW |            
+|   5 |    TABLE ACCESS FULL| EMP    |            
+--------------------------------------            
+
+12 rows selected.
+
+Connected.
+
+Grant succeeded.
+
+Connected.
+
+Explained.
+
+====
+==== View merging priviledges on E_VIEW only
+====
+
+PLAN_TABLE_OUTPUT                                 
+--------------------------------------------------
+Plan hash value: 1278477844                       
+                                                  
+--------------------------------------            
+| Id  | Operation           | Name   |            
+--------------------------------------            
+|   0 | SELECT STATEMENT    |        |            
+|   1 |  HASH JOIN          |        |            
+|   2 |   TABLE ACCESS FULL | EMP    |            
+|   3 |   VIEW              | D_VIEW |            
+|   4 |    TABLE ACCESS FULL| DEPT   |            
+--------------------------------------            
+
+11 rows selected.
+
+Connected.
+
+Grant succeeded.
+
+Connected.
+====
+==== View merging priviledges on D_VIEW and E_VIEW
+====
+
+Explained.
+
+
+PLAN_TABLE_OUTPUT                                 
+--------------------------------------------------
+Plan hash value: 615168685                        
+                                                  
+-----------------------------------               
+| Id  | Operation          | Name |               
+-----------------------------------               
+|   0 | SELECT STATEMENT   |      |               
+|   1 |  HASH JOIN         |      |               
+|   2 |   TABLE ACCESS FULL| DEPT |               
+|   3 |   TABLE ACCESS FULL| EMP  |               
+-----------------------------------               
+
+10 rows selected.
+
+Connected.
+
+Revoke succeeded.
+
+
+Revoke succeeded.
+
+Connected.
+====
+==== View merging priviledges revoked
+====
+
+Explained.
+
+
+PLAN_TABLE_OUTPUT                                 
+--------------------------------------------------
+Plan hash value: 3065742187                       
+                                                  
+--------------------------------------            
+| Id  | Operation           | Name   |            
+--------------------------------------            
+|   0 | SELECT STATEMENT    |        |            
+|   1 |  HASH JOIN          |        |            
+|   2 |   VIEW              | D_VIEW |            
+|   3 |    TABLE ACCESS FULL| DEPT   |            
+|   4 |   VIEW              | E_VIEW |            
+|   5 |    TABLE ACCESS FULL| EMP    |            
+--------------------------------------            
+
+12 rows selected.
+
+====
+==== View merging priviledges granted for any view
+====
+Connected.
+old   1: alter session set container = &container
+new   1: alter session set container = cdb1_pdb1
+
+Session altered.
+
+
+Grant succeeded.
+
+Connected.
+
+Explained.
+
+
+PLAN_TABLE_OUTPUT                                 
+--------------------------------------------------
+Plan hash value: 615168685                        
+                                                  
+-----------------------------------               
+| Id  | Operation          | Name |               
+-----------------------------------               
+|   0 | SELECT STATEMENT   |      |               
+|   1 |  HASH JOIN         |      |               
+|   2 |   TABLE ACCESS FULL| DEPT |               
+|   3 |   TABLE ACCESS FULL| EMP  |               
+-----------------------------------               
+
+10 rows selected.
+
+SQL> spool off
