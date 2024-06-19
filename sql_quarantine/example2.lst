@@ -1,0 +1,187 @@
+SQL> @example2
+SQL> alter session set result_cache_mode = 'manual';
+
+Session altered.
+
+Elapsed: 00:00:00.02
+SQL> @@q
+SQL> --
+SQL> -- We want to see raw query performance without the result cache
+SQL> --
+SQL> alter session set result_cache_mode = 'manual';
+
+Session altered.
+
+Elapsed: 00:00:00.02
+SQL> 
+SQL> set timing on
+SQL> select max(ln(a)) from fact1;
+select max(ln(a)) from fact1
+                       *
+ERROR at line 1:
+ORA-56955: quarantined plan used 
+
+
+Elapsed: 00:00:00.04
+SQL> set timing off
+SQL> 
+SQL> @@eg4
+SQL> set linesize 250 trim on tab off
+SQL> column sql_text format a50
+SQL> column sql_quarantine format a50
+SQL> column plan_hash_value format 999999999999999
+SQL> select sql_text, plan_hash_value, avoided_executions, sql_quarantine from v$sql where sql_quarantine is not null;
+
+SQL_TEXT                                            PLAN_HASH_VALUE AVOIDED_EXECUTIONS SQL_QUARANTINE
+-------------------------------------------------- ---------------- ------------------ --------------------------------------------------
+select max(ln(a)) from fact1                             4087791341                  3 SQL_QUARANTINE_8fa1cazvcrkd68dd3b059
+
+SQL> @@eg5
+SQL> column name format a50
+SQL> select sql_text,name,last_executed,enabled,plan_hash_value from dba_sql_quarantine;
+
+SQL_TEXT                                           NAME                                               LAST_EXECUTED                                                               ENA  PLAN_HASH_VALUE
+-------------------------------------------------- -------------------------------------------------- --------------------------------------------------------------------------- --- ----------------
+select max(ln(a)) from fact1                       SQL_QUARANTINE_8fa1cazvcrkd68dd3b059               19-JUN-24 04.12.30.000000 PM                                                YES       2379460697
+
+SQL> @@eg6
+SQL> --
+SQL> -- If the SQL statement has a different plan, it will complete
+SQL> -- because SQL quarantine relates to execution plans, not SQL statements in isolation
+SQL> -- Create an index, but disable the DBRM time limit since it will take more that 5 seconds
+SQL> --
+SQL> BEGIN
+  2     CS_RESOURCE_MANAGER.UPDATE_PLAN_DIRECTIVE(
+  3        consumer_group => 'LOW',
+  4        io_megabytes_limit => null,
+  5        elapsed_time_limit => null);
+  6  END;
+  7  /
+
+PL/SQL procedure successfully completed.
+
+SQL> create index fact1i on fact1(ln(a));
+
+Index created.
+
+SQL> BEGIN
+  2     CS_RESOURCE_MANAGER.UPDATE_PLAN_DIRECTIVE(
+  3        consumer_group => 'LOW',
+  4        io_megabytes_limit => null,
+  5        elapsed_time_limit => 5);
+  6  END;
+  7  /
+
+PL/SQL procedure successfully completed.
+
+SQL> @@q
+SQL> --
+SQL> -- We want to see raw query performance without the result cache
+SQL> --
+SQL> alter session set result_cache_mode = 'manual';
+
+Session altered.
+
+SQL> 
+SQL> set timing on
+SQL> select max(ln(a)) from fact1;
+
+MAX(LN(A))                                                                                                                                                                                                                                                
+----------                                                                                                                                                                                                                                                
+13.8155006                                                                                                                                                                                                                                                
+
+Elapsed: 00:00:00.13
+SQL> set timing off
+SQL> 
+SQL> @@plan
+SQL> set linesize 250
+SQL> set tab off
+SQL> set pagesize 1000
+SQL> column plan_table_output format a180
+SQL> 
+SQL> SELECT *
+  2  FROM table(DBMS_XPLAN.DISPLAY_CURSOR(FORMAT=>'TYPICAL'));
+
+PLAN_TABLE_OUTPUT                                                                                                                                                                                                                                         
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  ay4bu67fpvgcj, child number 1
+-------------------------------------
+select max(ln(a)) from fact1
+                           
+Plan hash value: 586295506
+                         
+-----------------------------------------------------------------------------------------------
+| Id  | Operation                   | Name            | Rows  | Bytes | Cost (%CPU)| Time     |
+-----------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT            |                 |       |       |    13 (100)|          |
+|   1 |  VIEW                       | VW_SQT_65BBF4BE |     1 |    13 |     3   (0)| 00:00:01 |
+|   2 |   SORT AGGREGATE            |                 |     1 |    13 |            |          |
+|   3 |    INDEX FULL SCAN (MIN/MAX)| FACT1I          |     1 |    13 |     3   (0)| 00:00:01 |
+-----------------------------------------------------------------------------------------------
+                                                                                              
+Note                                                                                          
+-----                                                                                         
+   - automatic DOP: Computed Degree of Parallelism is 1 because of no expensive parallel operation
+
+
+19 rows selected.
+
+SQL> 
+SQL> 
+SQL> @@eg7
+SQL> select name from dba_sql_quarantine;
+
+NAME                                              
+--------------------------------------------------
+SQL_QUARANTINE_8fa1cazvcrkd68dd3b059             
+
+SQL> 
+SQL> --
+SQL> -- Clean-up
+SQL> --
+SQL> begin
+  2    for quarantineObj in (select name from dba_sql_quarantine) loop
+  3      sys.dbms_sqlq.drop_quarantine(quarantineObj.name);
+  4    end loop;
+  5  end;
+  6  /
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> select name from dba_sql_quarantine;
+
+no rows selected
+
+SQL> @@eg9
+SQL> --
+SQL> -- Clean up the plan directive
+SQL> --
+SQL> BEGIN
+  2     CS_RESOURCE_MANAGER.UPDATE_PLAN_DIRECTIVE(
+  3        consumer_group => 'LOW',
+  4        io_megabytes_limit => null,
+  5        elapsed_time_limit => null);
+  6  END;
+  7  /
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> @@off
+SQL> alter session set optimizer_capture_sql_quarantine = false;
+
+Session altered.
+
+SQL> alter session set optimizer_use_sql_quarantine = false;
+
+Session altered.
+
+SQL> 
+SQL> show parameter quarantine
+
+NAME                                 TYPE        VALUE                                                                                                                                                                                                    
+------------------------------------ ----------- ------------------------------
+optimizer_capture_sql_quarantine     boolean     FALSE                        
+optimizer_use_sql_quarantine         boolean     FALSE                       
+SQL> spool off

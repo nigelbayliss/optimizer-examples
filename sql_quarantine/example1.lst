@@ -1,0 +1,167 @@
+SQL> @example1
+SQL> set echo on
+SQL> --
+SQL> -- We don't want this to affect a test
+SQL> --
+SQL> alter session set result_cache_mode = 'manual';
+
+Session altered.
+
+SQL> @off
+SQL> alter session set optimizer_capture_sql_quarantine = false;
+
+Session altered.
+
+SQL> alter session set optimizer_use_sql_quarantine = false;
+
+Session altered.
+
+SQL> 
+SQL> @@tab
+SQL> set echo on
+SQL> 
+SQL> drop table fact1 purge;
+
+Table dropped.
+
+SQL> 
+SQL> create table fact1 (a number(10), txt varchar2(1024));
+
+Table created.
+
+SQL> 
+SQL> begin
+  2    for i in 1..10
+  3    loop
+  4  	  insert /*+ APPEND */ into fact1 select i*rownum,
+  5  	  'XXXXXXXXXXXX'
+  6  	  from dual connect by rownum < 100000;
+  7  	  commit;
+  8    end loop;
+  9  end;
+ 10  /
+
+PL/SQL procedure successfully completed.
+
+SQL> exec dbms_stats.gather_table_stats(user,'fact1');
+
+PL/SQL procedure successfully completed.
+
+SQL> --
+SQL> -- Insert an extra row to ensure statsitcs are not fully up-to-date
+SQL> -- and statistics-based query transformation is disabled for the table because
+SQL> -- we want to see raw query transformation
+SQL> --
+SQL> insert into fact1 values(1,'ONEROW');
+
+1 row created.
+
+SQL> commit;
+
+Commit complete.
+
+SQL> @on
+SQL> alter session set optimizer_capture_sql_quarantine = true;
+
+Session altered.
+
+SQL> alter session set optimizer_use_sql_quarantine = true;
+
+Session altered.
+
+SQL> 
+SQL> BEGIN
+  2  	CS_RESOURCE_MANAGER.UPDATE_PLAN_DIRECTIVE(
+  3  	   consumer_group => 'LOW',
+  4  	   io_megabytes_limit => null,
+  5  	   elapsed_time_limit => 5);
+  6  END;
+  7  /
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> show parameter quarantine
+
+NAME                                 TYPE        VALUE                          
+------------------------------------ ----------- ------------------------------ 
+optimizer_capture_sql_quarantine     boolean     TRUE                           
+optimizer_use_sql_quarantine         boolean     TRUE                           
+SQL> 
+SQL> --
+SQL> -- It may take a little time for the
+SQL> -- quarantine data to be flushed to disk
+SQL> -- Execute "q.sql" periodically until
+SQL> -- quarantine kicks in - then run example2.sql
+SQL> --
+SQL> @@q
+SQL> --
+SQL> -- We want to see raw query performance without the result cache
+SQL> --
+SQL> alter session set result_cache_mode = 'manual';
+
+Session altered.
+
+SQL> 
+SQL> set timing on
+SQL> select max(ln(a)) from fact1;
+select max(ln(a)) from fact1
+              *
+ERROR at line 1:
+ORA-56735: elapsed time limit exceeded - call aborted 
+
+
+Elapsed: 00:00:05.23
+SQL> set timing off
+SQL> 
+SQL> 
+SQL> pause p...
+p...
+
+SQL> 
+SQL> @@q
+SQL> --
+SQL> -- We want to see raw query performance without the result cache
+SQL> --
+SQL> alter session set result_cache_mode = 'manual';
+
+Session altered.
+
+SQL> 
+SQL> set timing on
+SQL> select max(ln(a)) from fact1;
+select max(ln(a)) from fact1
+                       *
+ERROR at line 1:
+ORA-56955: quarantined plan used 
+
+
+Elapsed: 00:00:00.05
+SQL> set timing off
+SQL> 
+SQL> 
+SQL> pause p...
+p...
+
+SQL> 
+SQL> @@q
+SQL> --
+SQL> -- We want to see raw query performance without the result cache
+SQL> --
+SQL> alter session set result_cache_mode = 'manual';
+
+Session altered.
+
+SQL> 
+SQL> set timing on
+SQL> select max(ln(a)) from fact1;
+select max(ln(a)) from fact1
+*
+ERROR at line 1:
+ORA-56955: quarantined plan used 
+
+
+Elapsed: 00:00:00.05
+SQL> set timing off
+SQL> 
+SQL> spool off
