@@ -6,6 +6,8 @@ Use a DBA account, firstly run "example1.sql" and wait for SQL quarantine to kic
 
 Next, run "example2.sql." This script should run in its entirety to clean up database resource manager (which otherwise imposes a 5 second time limit on SQL statements)
 
+Spooled output is included - see example1.lst and example2.lst
+
 DISCLAIMER:
    <br/>-- These scripts are provided for educational purposes only.
    <br/>-- They are NOT supported by Oracle World Wide Technical Support.
