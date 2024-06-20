@@ -14,6 +14,12 @@ show parameter quarantine
 -- Execute "q.sql" periodically until
 -- quarantine kicks in - then run example2.sql
 --
+-- you will see when quarantine kicks in when the SQL statement is
+-- aborted, due to the resource constraint limits. The very moment
+-- the statement is aborted, it is marked as quarantined, due to the
+-- setting of (A) capturing statements for quarantine and (B) use
+-- and enforce quarantined statements
+
 @@q
 
 pause p...
