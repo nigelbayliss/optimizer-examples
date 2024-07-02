@@ -8,6 +8,8 @@ will not work in Oracle Autonomous Database.
 
 Execute tests in a user account granted DBA priviledge (but not SYS or SYSTEM). 
 
+Spool files (*.lst) are provided so you can see the expected results of the tests.
+
 ## Example 1
 
 Scenario:

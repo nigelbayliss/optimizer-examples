@@ -1,0 +1,388 @@
+SQL> @step3
+SQL> --
+SQL> -- Example:
+SQL> --    Initial (old) plan is good
+SQL> --    A new plan is chosen by the optimizer, but this plan is worse than the old plan
+SQL> --    Real-time SPM reinstates good (old) plan
+SQL> --    When SQL statement is hard parsed, optimizer chooses poor new plan again
+SQL> --    Reverse-verify kicks in a confirms that old plan was better
+SQL> --  Run this script followed by step4.sql
+SQL> --
+SQL> -- Reset test - clear out SQL plan baselines and the auto SQL tuning set
+SQL> --
+SQL> @@reset
+SQL> DECLARE
+  2    l_plans_dropped  PLS_INTEGER;
+  3  BEGIN
+  4  
+  5    FOR REC IN (SELECT DISTINCT SQL_HANDLE FROM DBA_SQL_PLAN_BASELINES WHERE sql_text LIKE 'select /* SPM_TEST_QUERY_Q1 */%')
+  6    LOOP
+  7        L_PLANS_DROPPED := DBMS_SPM.DROP_SQL_PLAN_BASELINE (
+  8          sql_handle => rec.sql_handle,
+  9          PLAN_NAME  => NULL);
+ 10    END LOOP;
+ 11  
+ 12  END;
+ 13  /
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:00.08
+SQL> 
+SQL> exec dbms_sqltune.delete_sqlset(sqlset_name=>'SYS_AUTO_STS',basic_filter=>'sql_text LIKE ''select /* SPM_TEST_QUERY_Q1 */%''',sqlset_owner=>'SYS')
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:00.22
+SQL> 
+SQL> @@flush
+SQL> alter system flush shared_pool;
+
+System altered.
+
+Elapsed: 00:00:00.03
+SQL> --
+SQL> -- Create tables
+SQL> --
+SQL> @@tab
+SQL> set echo on
+SQL> --
+SQL> -- Create two tables
+SQL> --
+SQL> set echo on
+SQL> drop table if exists sales_area1 purge;
+
+Table dropped.
+
+Elapsed: 00:00:00.43
+SQL> drop table if exists sales_area2 purge;
+
+Table dropped.
+
+Elapsed: 00:00:00.02
+SQL> 
+SQL> create table sales_area1 (sale_code number(10), b varchar2(2000), amount number(10,2), sale_type number(10), c varchar2(1000));
+
+Table created.
+
+Elapsed: 00:00:00.05
+SQL> 
+SQL> 
+SQL> var str VARCHAR2(1200)
+SQL> exec :str := dbms_random.string('u',2000);
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:00.01
+SQL> var str2 VARCHAR2(1200)
+SQL> exec :str2 := dbms_random.string('u',50);
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:00.00
+SQL> insert /*+ APPEND */ into sales_area1
+  2  select mod(rn,1000), :str, dbms_random.value(1,5), mod(rn,100),:str2
+  3  from (
+  4      select trunc((rownum+1)/2) as rn, mod(rownum+1,2) as parity
+  5      from (select null from dual connect by level <= 5000)
+  6         , (select null from dual connect by level <= 500)
+  7       );
+
+2500000 rows created.
+
+Elapsed: 00:00:19.98
+SQL> 
+SQL> commit;
+
+Commit complete.
+
+Elapsed: 00:00:00.32
+SQL> 
+SQL> create table sales_area2 as select sale_code,b,dbms_random.value(1,3) amount,sale_type,c from sales_area1;
+
+Table created.
+
+Elapsed: 00:00:26.19
+SQL> 
+SQL> create index sales_area2i on sales_area2 (sale_code,c);
+
+Index created.
+
+Elapsed: 00:00:09.92
+SQL> 
+SQL> create index sales_typ1i on sales_area1 (sale_type,c);
+
+Index created.
+
+Elapsed: 00:00:09.67
+SQL> --
+SQL> -- Gather statistics (without histograms for the purposes of this test)
+SQL> --
+SQL> exec dbms_stats.gather_table_stats(user,'sales_area1',method_opt=>'for all columns size 1',no_invalidate=>false)
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:06.38
+SQL> exec dbms_stats.gather_table_stats(user,'sales_area2',method_opt=>'for all columns size 1',no_invalidate=>false)
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:06.72
+SQL> 
+SQL> --
+SQL> -- Enable real-time SPM
+SQL> --
+SQL> @@auto
+SQL> --
+SQL> -- Enable real-time SPM
+SQL> --
+SQL> exec dbms_spm.configure('AUTO_SPM_EVOLVE_TASK', 'AUTO')
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:00.09
+SQL> --
+SQL> -- Execute the query, manipulating the cost to yield a good plan
+SQL> --
+SQL> @@cost_good
+SQL> --
+SQL> -- Pick a non default value that will nevertheless give us a good plan
+SQL> --
+SQL> alter session set optimizer_index_cost_adj = 90
+  2  /
+
+Session altered.
+
+Elapsed: 00:00:00.00
+SQL> @@q
+SQL> set timing on
+SQL> 
+SQL> set echo on
+SQL> select /* SPM_TEST_QUERY_Q1 */ sum(t2.amount)
+  2  from   sales_area1 t1,
+  3         sales_area2 t2
+  4  where  t1.sale_code = t2.sale_code
+  5  and    t1.sale_type  = 1;
+
+SUM(T2.AMOUNT)
+--------------
+     125090021
+
+Elapsed: 00:00:05.98
+SQL> set echo off
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  g6hqazvppxq6m, child number 0
+-------------------------------------
+select /* SPM_TEST_QUERY_Q1 */ sum(t2.amount) from   sales_area1 t1,
+    sales_area2 t2 where  t1.sale_code = t2.sale_code and
+t1.sale_type  = 1
+
+Plan hash value: 2727377809
+
+-----------------------------------------------------------------------------------------------------
+| Id  | Operation                             | Name        | Rows  | Bytes | Cost (%CPU)| Time     |
+-----------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT                      |             |       |       |   149K(100)|          |
+|   1 |  SORT AGGREGATE                       |             |     1 |    33 |            |          |
+|*  2 |   HASH JOIN                           |             |    62M|  1966M|   149K  (1)| 00:00:06 |
+|   3 |    TABLE ACCESS BY INDEX ROWID BATCHED| SALES_AREA1 | 25000 |   170K| 13710   (1)| 00:00:01 |
+|*  4 |     INDEX RANGE SCAN                  | SALES_TYP1I | 25000 |       |   208   (0)| 00:00:01 |
+|   5 |    TABLE ACCESS FULL                  | SALES_AREA2 |  2500K|    61M|   135K  (1)| 00:00:06 |
+-----------------------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   2 - access("T1"."SALE_CODE"="T2"."SALE_CODE")
+   4 - access("T1"."SALE_TYPE"=1)
+
+
+25 rows selected.
+
+Elapsed: 00:00:00.20
+SQL> @@q
+SQL> set timing on
+SQL> 
+SQL> set echo on
+SQL> select /* SPM_TEST_QUERY_Q1 */ sum(t2.amount)
+  2  from   sales_area1 t1,
+  3         sales_area2 t2
+  4  where  t1.sale_code = t2.sale_code
+  5  and    t1.sale_type  = 1;
+
+SUM(T2.AMOUNT)
+--------------
+     125090021
+
+Elapsed: 00:00:06.20
+SQL> set echo off
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  g6hqazvppxq6m, child number 0
+-------------------------------------
+select /* SPM_TEST_QUERY_Q1 */ sum(t2.amount) from   sales_area1 t1,
+    sales_area2 t2 where  t1.sale_code = t2.sale_code and
+t1.sale_type  = 1
+
+Plan hash value: 2727377809
+
+-----------------------------------------------------------------------------------------------------
+| Id  | Operation                             | Name        | Rows  | Bytes | Cost (%CPU)| Time     |
+-----------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT                      |             |       |       |   149K(100)|          |
+|   1 |  SORT AGGREGATE                       |             |     1 |    33 |            |          |
+|*  2 |   HASH JOIN                           |             |    62M|  1966M|   149K  (1)| 00:00:06 |
+|   3 |    TABLE ACCESS BY INDEX ROWID BATCHED| SALES_AREA1 | 25000 |   170K| 13710   (1)| 00:00:01 |
+|*  4 |     INDEX RANGE SCAN                  | SALES_TYP1I | 25000 |       |   208   (0)| 00:00:01 |
+|   5 |    TABLE ACCESS FULL                  | SALES_AREA2 |  2500K|    61M|   135K  (1)| 00:00:06 |
+-----------------------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   2 - access("T1"."SALE_CODE"="T2"."SALE_CODE")
+   4 - access("T1"."SALE_TYPE"=1)
+
+
+25 rows selected.
+
+Elapsed: 00:00:00.03
+SQL> --
+SQL> -- Wait now for SQL statement to appear in SYS_AUTO_STS
+SQL> --
+SQL> @@wait_asts
+SQL> --
+SQL> -- Wait for the Auto SQL Tuning Set Capture Task
+SQL> --
+SQL> prompt Waiting for Auto SQL Tuning Set Capture...
+Waiting for Auto SQL Tuning Set Capture...
+SQL> prompt By default, this is 15mins, but we'll temporarilty shorten it to two mins speed things up
+By defauult, this is 15mins, but we'll temporarilty shorten it to two mins speed things up
+SQL> --
+SQL> exec dbms_auto_task_admin.modify_autotask_setting('Auto STS Capture Task', 'INTERVAL', 120)
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:00.01
+SQL> --
+SQL> @@task
+SQL> set pagesize 1000
+SQL> set linesize 250
+SQL> set trims on
+SQL> column task_name format a30
+SQL> 
+SQL> select current_timestamp now from dual;
+
+NOW
+---------------------------------------------------------------------------
+02-JUL-24 12.34.21.516210 PM +00:00
+
+Elapsed: 00:00:00.00
+SQL> 
+SQL> 
+SQL> select task_name, interval,status, last_schedule_time, systimestamp-last_schedule_time ago
+  2  from dba_autotask_schedule_control
+  3  where dbid = sys_context('userenv','con_dbid')
+  4  and task_name = 'Auto STS Capture Task';
+
+TASK_NAME                        INTERVAL STATUS     LAST_SCHEDULE_TIME                                                          AGO
+------------------------------ ---------- ---------- --------------------------------------------------------------------------- ---------------------------------------------------------------------------
+Auto STS Capture Task                 120 SUCCEEDED  02-JUL-24 12.32.07.218 PM +00:00                                            +000000000 00:02:14.325548
+
+Elapsed: 00:00:00.03
+SQL> declare
+  2     lasttime timestamp ;
+  3     thistime timestamp ;
+  4     executed boolean := false;
+  5     sts varchar2(20);
+  6     cursor c1 is
+  7        select last_schedule_time,status
+  8        into   thistime,sts
+  9        from   dba_autotask_schedule_control
+ 10        where  dbid = sys_context('userenv','con_dbid')
+ 11        and    task_name = 'Auto STS Capture Task';
+ 12  begin
+ 13     open c1;
+ 14     fetch c1 into lasttime,sts;
+ 15     close c1;
+ 16     while not executed
+ 17     loop
+ 18        open c1;
+ 19        fetch c1 into thistime,sts;
+ 20        close c1;
+ 21        if thistime>lasttime and sts = 'SUCCEEDED'
+ 22        then
+ 23           executed := true;
+ 24        else
+ 25           dbms_lock.sleep(2);
+ 26        end if;
+ 27     end loop;
+ 28  end;
+ 29  /
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:48.02
+SQL> --
+SQL> @@task
+SQL> set pagesize 1000
+SQL> set linesize 250
+SQL> set trims on
+SQL> column task_name format a30
+SQL> 
+SQL> select current_timestamp now from dual;
+
+NOW
+---------------------------------------------------------------------------
+02-JUL-24 12.35.09.567635 PM +00:00
+
+Elapsed: 00:00:00.00
+SQL> 
+SQL> 
+SQL> select task_name, interval,status, last_schedule_time, systimestamp-last_schedule_time ago
+  2  from dba_autotask_schedule_control
+  3  where dbid = sys_context('userenv','con_dbid')
+  4  and task_name = 'Auto STS Capture Task';
+
+TASK_NAME                        INTERVAL STATUS     LAST_SCHEDULE_TIME                                                          AGO
+------------------------------ ---------- ---------- --------------------------------------------------------------------------- ---------------------------------------------------------------------------
+Auto STS Capture Task                 120 SUCCEEDED  02-JUL-24 12.35.07.393 PM +00:00                                            +000000000 00:00:02.175017
+
+Elapsed: 00:00:00.00
+SQL> --
+SQL> -- Back to the default
+SQL> --
+SQL> exec dbms_auto_task_admin.modify_autotask_setting('Auto STS Capture Task', 'INTERVAL', 900)
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:00.00
+SQL> @@asts
+SQL> set linesize 250
+SQL> set pagesize 1000
+SQL> column txt format a100
+SQL> column sql_plan_baseline format a50
+SQL> 
+SQL> --
+SQL> -- For real-time SPM to kick in, the initial plan must be captured in the
+SQL> -- automatic SQL tuning set. The following query will return a row if the
+SQL> -- SQL statement has been captured.
+SQL> --
+SQL> select substr(sql_text,1,100) txt,executions,decode(executions,0,-1,round(buffer_gets/executions)) bget_per_exec,plan_hash_value
+  2  from dba_sqlset_statements
+  3  where sqlset_name = 'SYS_AUTO_STS'
+  4  and sql_text like 'select /* SPM_TEST_QUERY_Q1 */%'
+  5  order by 3;
+
+TXT                                                                                                  EXECUTIONS BGET_PER_EXEC PLAN_HASH_VALUE
+---------------------------------------------------------------------------------------------------- ---------- ------------- ---------------
+select /* SPM_TEST_QUERY_Q1 */ sum(t2.amount)                                                                 2        513434      2727377809
+from   sales_area1 t1,
+       sale
+
+
+Elapsed: 00:00:00.04
+SQL> spool off

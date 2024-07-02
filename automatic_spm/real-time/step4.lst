@@ -1,0 +1,201 @@
+SQL> @step4
+SQL> @@cost_bad
+SQL> --
+SQL> -- We are going to manipulate parameters to induce SQL performance issues
+SQL> -- In this case, we'll induce a poor plan by adjusting the index cost
+SQL> --
+SQL> alter session set optimizer_index_cost_adj = 10000
+  2  /
+
+Session altered.
+
+Elapsed: 00:00:00.00
+SQL> --
+SQL> -- The Note section indicates invalidations
+SQL> -- We've manipulated to cost to cause a plan performance
+SQL> -- regression. Real-time SPM will detect the plan change
+SQL> -- and reinstate the old plan.
+SQL> --
+SQL> @@q
+SQL> set timing on
+SQL> 
+SQL> set echo on
+SQL> select /* SPM_TEST_QUERY_Q1 */ sum(t2.amount)
+  2  from   sales_area1 t1,
+  3         sales_area2 t2
+  4  where  t1.sale_code = t2.sale_code
+  5  and    t1.sale_type  = 1;
+
+SUM(T2.AMOUNT)
+--------------
+     125090021
+
+Elapsed: 00:00:06.10
+SQL> set echo off
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  g6hqazvppxq6m, child number 1
+
+An uncaught error happened in prepare_sql_statement : ORA-01403: no data found
+
+NOTE: cannot fetch plan for SQL_ID: g6hqazvppxq6m, CHILD_NUMBER: 1
+      Please verify value of SQL_ID and CHILD_NUMBER;
+      It could also be that the plan is no longer in cursor cache (check v$sql_plan)
+
+
+8 rows selected.
+
+Elapsed: 00:00:00.05
+SQL> --
+SQL> -- The SQL plan baseline is used
+SQL> --
+SQL> @@q
+SQL> set timing on
+SQL> 
+SQL> set echo on
+SQL> select /* SPM_TEST_QUERY_Q1 */ sum(t2.amount)
+  2  from   sales_area1 t1,
+  3         sales_area2 t2
+  4  where  t1.sale_code = t2.sale_code
+  5  and    t1.sale_type  = 1;
+
+SUM(T2.AMOUNT)
+--------------
+     125090021
+
+Elapsed: 00:00:04.64
+SQL> set echo off
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  g6hqazvppxq6m, child number 2
+-------------------------------------
+select /* SPM_TEST_QUERY_Q1 */ sum(t2.amount) from   sales_area1 t1,
+    sales_area2 t2 where  t1.sale_code = t2.sale_code and
+t1.sale_type  = 1
+
+Plan hash value: 2727377809
+
+-----------------------------------------------------------------------------------------------------
+| Id  | Operation                             | Name        | Rows  | Bytes | Cost (%CPU)| Time     |
+-----------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT                      |             |       |       |   149K(100)|          |
+|   1 |  SORT AGGREGATE                       |             |     1 |    33 |            |          |
+|*  2 |   HASH JOIN                           |             |    62M|  1966M|   149K  (1)| 00:00:06 |
+|   3 |    TABLE ACCESS BY INDEX ROWID BATCHED| SALES_AREA1 | 25000 |   170K| 13710   (1)| 00:00:01 |
+|*  4 |     INDEX RANGE SCAN                  | SALES_TYP1I | 25000 |       |   208   (0)| 00:00:01 |
+|   5 |    TABLE ACCESS FULL                  | SALES_AREA2 |  2500K|    61M|   135K  (1)| 00:00:06 |
+-----------------------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   2 - access("T1"."SALE_CODE"="T2"."SALE_CODE")
+   4 - access("T1"."SALE_TYPE"=1)
+
+Note
+-----
+   - SQL plan baseline SQL_PLAN_20j5m31t6u71h169efe64 used for this statement
+
+
+29 rows selected.
+
+Elapsed: 00:00:00.23
+SQL> --
+SQL> -- We'll force a hard parse and double-check we have the SQL plan baseline
+SQL> --
+SQL> @@flush
+SQL> alter system flush shared_pool;
+
+System altered.
+
+Elapsed: 00:00:00.06
+SQL> @@q
+SQL> set timing on
+SQL> 
+SQL> set echo on
+SQL> select /* SPM_TEST_QUERY_Q1 */ sum(t2.amount)
+  2  from   sales_area1 t1,
+  3         sales_area2 t2
+  4  where  t1.sale_code = t2.sale_code
+  5  and    t1.sale_type  = 1;
+
+SUM(T2.AMOUNT)
+--------------
+     125090021
+
+Elapsed: 00:00:05.17
+SQL> set echo off
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  g6hqazvppxq6m, child number 1
+-------------------------------------
+select /* SPM_TEST_QUERY_Q1 */ sum(t2.amount) from   sales_area1 t1,
+    sales_area2 t2 where  t1.sale_code = t2.sale_code and
+t1.sale_type  = 1
+
+Plan hash value: 2727377809
+
+-----------------------------------------------------------------------------------------------------
+| Id  | Operation                             | Name        | Rows  | Bytes | Cost (%CPU)| Time     |
+-----------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT                      |             |       |       |   149K(100)|          |
+|   1 |  SORT AGGREGATE                       |             |     1 |    33 |            |          |
+|*  2 |   HASH JOIN                           |             |    62M|  1966M|   149K  (1)| 00:00:06 |
+|   3 |    TABLE ACCESS BY INDEX ROWID BATCHED| SALES_AREA1 | 25000 |   170K| 13710   (1)| 00:00:01 |
+|*  4 |     INDEX RANGE SCAN                  | SALES_TYP1I | 25000 |       |   208   (0)| 00:00:01 |
+|   5 |    TABLE ACCESS FULL                  | SALES_AREA2 |  2500K|    61M|   135K  (1)| 00:00:06 |
+-----------------------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   2 - access("T1"."SALE_CODE"="T2"."SALE_CODE")
+   4 - access("T1"."SALE_TYPE"=1)
+
+Note
+-----
+   - SQL plan baseline SQL_PLAN_20j5m31t6u71h169efe64 used for this statement
+
+
+29 rows selected.
+
+Elapsed: 00:00:01.34
+SQL> @@diag
+SQL> column plan_name format a40
+SQL> --
+SQL> -- 'worse' means that a plan that's just been executed is worse than a plan in ASTS
+SQL> -- 'better' means that a plan that's just been executed is better than a plan in ASTS
+SQL> -- 'normal' means a plan changed has been spotted and is being verified against a plan in ASTS
+SQL> -- 'reverse' means a reverse verification check is being made to ensure the plan previously chosen from ASTS out-performs the previously-rejected new plan
+SQL> --
+SQL> select p.plan_name, p.foreground_last_verified, pfspm.status result, pfspm.ver verify_type
+  2  from dba_sql_plan_baselines p,
+  3      XMLTABLE(
+  4           '/notes'
+  5           passing xmltype(p.notes)
+  6           columns
+  7               plan_id         NUMBER    path 'plan_id',
+  8               flags           NUMBER    path 'flags',
+  9               fg_spm          XMLType   path 'fg_spm') pf,
+ 10       XMLTABLE(
+ 11           '/fg_spm'
+ 12           passing pf.fg_spm
+ 13           columns
+ 14               ver             VARCHAR2(8)    path 'ver',
+ 15               status          VARCHAR2(8)    path 'status') pfspm
+ 16  where notes is not null
+ 17  and sql_text like 'select /* SPM_TEST_QUERY_Q1%'
+ 18  order by p.foreground_last_verified
+ 19  ;
+
+PLAN_NAME                                FOREGROUND_LAST_VERIFIED                                                    RESULT   VERIFY_T
+---------------------------------------- --------------------------------------------------------------------------- -------- --------
+SQL_PLAN_20j5m31t6u71h8059011b           02-JUL-24 12.35.32.000000 PM                                                worse    normal
+SQL_PLAN_20j5m31t6u71h169efe64           02-JUL-24 12.35.37.000000 PM                                                better   reverse
+
+Elapsed: 00:00:00.16
+SQL> 
+SQL> spool off
