@@ -17,3 +17,12 @@ A spool file (example.lst) is provided so you can see the expected results of th
 - Two SQL plan baselines are created, the one for the good plan is accepted
 
 To run the scenario, log into a DBA account and run the script "example.sql"
+
+WARNING! To make the test re-runnable, the AWR repository is purged for 5 days back
+         so that the test query is removed. 
+
+DISCLAIMER:
+- These scripts are provided for educational purposes only.
+- They are NOT supported by Oracle World Wide Technical Support.
+- The scripts have been tested and they appear to work as intended.
+- You should always run scripts on a test instance.
