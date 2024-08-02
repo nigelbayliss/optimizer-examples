@@ -1,0 +1,519 @@
+SQL> set echo on
+SQL> @example
+SQL> --
+SQL> -- Enable auto SPM
+SQL> --
+SQL> @on
+SQL> exec dbms_spm.configure('AUTO_SPM_EVOLVE_TASK', 'ON')
+
+PL/SQL procedure successfully completed.
+
+SQL> --
+SQL> -- Reset test - it can be restarted from here
+SQL> --
+SQL> @reset
+SQL> DECLARE
+  2    l_plans_dropped	PLS_INTEGER;
+  3  BEGIN
+  4  
+  5    FOR REC IN (SELECT DISTINCT SQL_HANDLE FROM DBA_SQL_PLAN_BASELINES WHERE sql_text LIKE 'select /* SPM_TEST_QUERY_Q1 */%')
+  6    LOOP
+  7  	   L_PLANS_DROPPED := DBMS_SPM.DROP_SQL_PLAN_BASELINE (
+  8  	     sql_handle => rec.sql_handle,
+  9  	     PLAN_NAME	=> NULL);
+ 10    END LOOP;
+ 11  
+ 12  END;
+ 13  /
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> exec dbms_sqltune.delete_sqlset(sqlset_name=>'SYS_AUTO_STS',basic_filter=>'sql_text LIKE ''select /* SPM_TEST_QUERY_Q1 */%''',sqlset_owner=>'SYS')
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> @@flush
+SQL> alter system flush shared_pool
+  2  /
+
+System altered.
+
+SQL> prompt Warning! About to purge 5 days of AWR data to ensure
+Warning! About to purge 5 days of AWR data to ensure
+SQL> prompt the test query is not present (in case the test is executed more than once)
+the test query is not present (in case the test is executed more than once)
+SQL> pause p...
+p...
+
+SQL> @pawr
+SQL> --
+SQL> -- Purge AWR to remove test queries - this resets the test
+SQL> --
+SQL> declare
+  2    n1 number;
+  3    n2 number;
+  4    cursor c1 is select min(snap_id),max(snap_id)
+  5  		    from   dba_hist_snapshot
+  6  		    where  begin_interval_time > sysdate - 5
+  7  		    and    dbid = sys_context('userenv','con_dbid');
+  8  begin
+  9    open c1;
+ 10    fetch c1 into n1,n2;
+ 11    close c1;
+ 12    if n1 is not null
+ 13    then
+ 14  	  dbms_workload_repository.drop_snapshot_range(n1,n2);
+ 15    end if;
+ 16  end;
+ 17  /
+
+PL/SQL procedure successfully completed.
+
+SQL> --
+SQL> prompt These queries should return no rows if the test is successfully reset
+These queries should return no rows if the test is successfully reset
+SQL> --
+SQL> @base
+SQL> set linesize 250
+SQL> column plan_name format a40
+SQL> column signature format 999999999999999999999
+SQL> --
+SQL> prompt SQL plan baseline data
+SQL plan baseline data
+SQL> --
+SQL> select signature,plan_name,accepted,sql_text
+  2  from   dba_sql_plan_baselines
+  3  where  sql_text LIKE 'select /* SPM_TEST_QUERY_Q1 */%';
+
+no rows selected
+
+SQL> @asts
+SQL> set linesize 250
+SQL> set pagesize 1000
+SQL> column txt format a100
+SQL> column sql_plan_baseline format a50
+SQL> 
+SQL> --
+SQL> -- For SPM to kick in, the initial plan must be captured in the
+SQL> -- automatic SQL tuning set. The following query will return a row if the
+SQL> -- SQL statement has been captured.
+SQL> --
+SQL> select substr(sql_text,1,100) txt,executions,decode(executions,0,-1,round(buffer_gets/executions)) bget_per_exec,plan_hash_value
+  2  from dba_sqlset_statements
+  3  where sqlset_name = 'SYS_AUTO_STS'
+  4  and sql_text like 'select /* SPM_TEST_QUERY_Q1 */%'
+  5  order by 3;
+
+no rows selected
+
+SQL> @awr
+SQL> --
+SQL> prompt Search AWR to confirm we have captured the test query
+Search AWR to confirm we have captured the test query
+SQL> --
+SQL> select distinct snap_id,plan_hash_value,buffer_gets_delta
+  2  from DBA_HIST_SQLSTAT
+  3  where sql_id in (select sql_id from dba_hist_sqltext where sql_text like 'select /* SPM_TEST_QUERY_Q1 */%')
+  4  order by snap_id;
+
+   SNAP_ID PLAN_HASH_VALUE BUFFER_GETS_DELTA                                                                                                                                                                                                              
+---------- --------------- -----------------                                                                                                                                                                                                              
+       404      2368473642           2625944                                                                                                                                                                                                              
+       404      2368473642          26284657                                                                                                                                                                                                              
+
+SQL> prompt Here we check that AWR and Auto SQL Tuning Set do not contain the test query
+Here we check that AWR and Auto SQL Tuning Set do not contain the test query
+SQL> prompt and there should be no SQL plan baseline for the test query
+and there should be no SQL plan baseline for the test query
+SQL> pause p...
+p...
+
+SQL> --
+SQL> prompt Create schema - histograms ensure plan is good
+Create schema - histograms ensure plan is good
+SQL> --
+SQL> @tab
+SQL> set echo on
+SQL> --
+SQL> -- Create two tables with a skewed dataset
+SQL> --
+SQL> declare
+  2    ORA_00942 exception; pragma Exception_Init(ORA_00942, -00942);
+  3  begin
+  4    execute immediate 'drop table sales_area1 purge';
+  5  exception when ORA_00942 then null;
+  6  end;
+  7  /
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> declare
+  2    ORA_00942 exception; pragma Exception_Init(ORA_00942, -00942);
+  3  begin
+  4    execute immediate 'drop table sales_area2 purge';
+  5  exception when ORA_00942 then null;
+  6  end;
+  7  /
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> create table sales_area1 (sale_code number(10), b varchar2(1000), amount number(10,2), sale_type number(10));
+
+Table created.
+
+SQL> 
+SQL> 
+SQL> var str VARCHAR2(10)
+SQL> exec :str := dbms_random.string('u',10);
+
+PL/SQL procedure successfully completed.
+
+SQL> insert /*+ APPEND */ into sales_area1
+  2  select DECODE(parity, 0,rn, 1,rn+1000000), :str, dbms_random.value(1,5), DECODE(parity, 0,rn, 1,10)
+  3  from (
+  4  	 select trunc((rownum+1)/2) as rn, mod(rownum+1,2) as parity
+  5  	 from (select null from dual connect by level <= 9000)
+  6  	    , (select null from dual connect by level <= 500)
+  7  	  );
+
+4500000 rows created.
+
+SQL> 
+SQL> commit;
+
+Commit complete.
+
+SQL> 
+SQL> create table sales_area2 as select sale_code,b,dbms_random.value(1,3) amount,sale_type from sales_area1;
+
+Table created.
+
+SQL> 
+SQL> create index sales_area1i on sales_area1 (sale_code);
+
+Index created.
+
+SQL> create index sales_area2i on sales_area2 (sale_code);
+
+Index created.
+
+SQL> 
+SQL> --
+SQL> -- Gather with histograms
+SQL> --
+SQL> @@gatherh
+SQL> --
+SQL> -- Gather statistics with histograms
+SQL> --
+SQL> exec dbms_stats.gather_table_stats(user,'sales_area1',method_opt=>'for all columns size 254',no_invalidate=>false)
+
+PL/SQL procedure successfully completed.
+
+SQL> exec dbms_stats.gather_table_stats(user,'sales_area2',method_opt=>'for all columns size 254',no_invalidate=>false)
+
+PL/SQL procedure successfully completed.
+
+SQL> --
+SQL> prompt This is the test query - the HASH JOIN is best,
+This is the test query - the HASH JOIN is best,
+SQL> prompt and will be chosen as long as histograms are present
+and will be chosen as long as histograms are present
+SQL> --
+SQL> @q1
+SQL> set timing on
+SQL> --
+SQL> -- For the purposes if this test, we don't want adaptive plans rescuing the performance
+SQL> -- regression we induce
+SQL> --
+SQL> set echo on
+SQL> select /* SPM_TEST_QUERY_Q1 */ /*+ NO_ADAPTIVE_PLAN */ sum(t1.amount), sum(t2.amount)
+  2  from   sales_area1 t1,
+  3  	    sales_area2 t2
+  4  where  t1.sale_code = t2.sale_code
+  5  and    t1.sale_type  = 10;
+
+SUM(T1.AMOUNT) SUM(T2.AMOUNT)                                                                                                                                                                                                                             
+-------------- --------------                                                                                                                                                                                                                             
+    10503770.1      6999997.6                                                                                                                                                                                                                             
+
+Elapsed: 00:00:01.73
+SQL> set echo off
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------
+SQL_ID  422ar3ttckhah, child number 0
+-------------------------------------
+select /* SPM_TEST_QUERY_Q1 */ /*+ NO_ADAPTIVE_PLAN */ sum(t1.amount),
+sum(t2.amount) from   sales_area1 t1,        sales_area2 t2 where
+t1.sale_code = t2.sale_code and    t1.sale_type  = 10
+
+Plan hash value: 1785747100
+
+-------------------------------------------------------------------------------------------
+| Id  | Operation           | Name        | Rows  | Bytes |TempSpc| Cost (%CPU)| Time     |
+-------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT    |             |       |       |       | 24723 (100)|          |
+|   1 |  SORT AGGREGATE     |             |     1 |    43 |       |            |          |
+|*  2 |   HASH JOIN         |             |  3099K|   127M|    57M| 24723   (1)| 00:00:01 |
+|*  3 |    TABLE ACCESS FULL| SALES_AREA1 |  2237K|    32M|       |  5145   (1)| 00:00:01 |
+|   4 |    TABLE ACCESS FULL| SALES_AREA2 |  4500K|   120M|       |  8190   (1)| 00:00:01 |
+-------------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   2 - access("T1"."SALE_CODE"="T2"."SALE_CODE")
+   3 - filter("T1"."SALE_TYPE"=10)
+
+
+24 rows selected.
+
+Elapsed: 00:00:00.24
+Waiting for Auto SQL Tuning Set Capture...
+By default, this is 15mins, but we will temporarilty shorten it to two mins speed things up
+This change is not normally recommened, but it is used for the sake of demonstration
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:00.01
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:10.02
+
+NOW
+---------------------------------------------------------------------------
+02-AUG-24 02.22.16.253535 PM +00:00
+
+Elapsed: 00:00:00.00
+
+TASK_NAME                        INTERVAL STATUS     LAST_SCHEDULE_TIME                                                          AGO
+------------------------------ ---------- ---------- --------------------------------------------------------------------------- ---------------------------------------------------------------------------
+Auto STS Capture Task                 120 SUCCEEDED  02-AUG-24 02.22.13.796 PM +00:00                                            +000000000 00:00:02.460817
+
+Elapsed: 00:00:00.00
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:00.01
+
+TXT                                                                                                  EXECUTIONS BGET_PER_EXEC PLAN_HASH_VALUE
+---------------------------------------------------------------------------------------------------- ---------- ------------- ---------------
+select /* SPM_TEST_QUERY_Q1 */ /*+ NO_ADAPTIVE_PLAN */ sum(t1.amount), sum(t2.am                              1         48791      1785747100
+
+Elapsed: 00:00:00.00
+Here we check to make sure we have captured our test query
+The automatic SQL tuning set records the good HASH JOIN plan
+p...
+
+Now that the SQL statement (q1) is seen in SQL tuning set (above)
+we will now induce a bad NESTED LOOP plan by dropping the histograms
+SQL> exec dbms_stats.delete_column_stats(user,'sales_area1','sale_type',no_invalidate=>false,col_stat_type=>'HISTOGRAM');
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:00.08
+SQL> exec dbms_stats.delete_column_stats(user,'sales_area2','sale_type',no_invalidate=>false,col_stat_type=>'HISTOGRAM');
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:00.02
+SQL> --
+SQL> prompt Execute the query again using the bad nested loops plan, and ensure it's captured in AWR
+Execute the query again using the bad nested loops plan, and ensure it's captured in AWR
+SQL> --
+SQL> @q1
+SQL> set timing on
+SQL> --
+SQL> -- For the purposes if this test, we don't want adaptive plans rescuing the performance
+SQL> -- regression we induce
+SQL> --
+SQL> set echo on
+SQL> select /* SPM_TEST_QUERY_Q1 */ /*+ NO_ADAPTIVE_PLAN */ sum(t1.amount), sum(t2.amount)
+  2  from   sales_area1 t1,
+  3         sales_area2 t2
+  4  where  t1.sale_code = t2.sale_code
+  5  and    t1.sale_type  = 10;
+
+SUM(T1.AMOUNT) SUM(T2.AMOUNT)
+-------------- --------------
+    10503770.1      6999997.6
+
+Elapsed: 00:00:05.29
+SQL> set echo off
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------
+SQL_ID  422ar3ttckhah, child number 0
+-------------------------------------
+select /* SPM_TEST_QUERY_Q1 */ /*+ NO_ADAPTIVE_PLAN */ sum(t1.amount),
+sum(t2.amount) from   sales_area1 t1,        sales_area2 t2 where
+t1.sale_code = t2.sale_code and    t1.sale_type  = 10
+
+Plan hash value: 2368473642
+
+----------------------------------------------------------------------------------------------
+| Id  | Operation                     | Name         | Rows  | Bytes | Cost (%CPU)| Time     |
+----------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT              |              |       |       |  5151 (100)|          |
+|   1 |  SORT AGGREGATE               |              |     1 |    43 |            |          |
+|   2 |   NESTED LOOPS                |              |     3 |   129 |  5151   (1)| 00:00:01 |
+|   3 |    NESTED LOOPS               |              |     3 |   129 |  5151   (1)| 00:00:01 |
+|*  4 |     TABLE ACCESS FULL         | SALES_AREA1  |     2 |    30 |  5145   (1)| 00:00:01 |
+|*  5 |     INDEX RANGE SCAN          | SALES_AREA2I |     1 |       |     2   (0)| 00:00:01 |
+|   6 |    TABLE ACCESS BY INDEX ROWID| SALES_AREA2  |     1 |    28 |     3   (0)| 00:00:01 |
+----------------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   4 - filter("T1"."SALE_TYPE"=10)
+   5 - access("T1"."SALE_CODE"="T2"."SALE_CODE")
+
+
+26 rows selected.
+
+Elapsed: 00:00:00.03
+Wait for the bad plan to be captured in the Auto SQL Tuning Set
+Waiting for Auto SQL Tuning Set Capture...
+By default, this is 15mins, but we will temporarilty shorten it to two mins speed things up
+This change is not normally recommened, but it is used for the sake of demonstration
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:00.00
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:01:48.03
+
+NOW
+---------------------------------------------------------------------------
+02-AUG-24 02.24.13.868887 PM +00:00
+
+Elapsed: 00:00:00.00
+
+TASK_NAME                        INTERVAL STATUS     LAST_SCHEDULE_TIME                                                          AGO
+------------------------------ ---------- ---------- --------------------------------------------------------------------------- ---------------------------------------------------------------------------
+Auto STS Capture Task                 120 SUCCEEDED  02-AUG-24 02.24.13.667 PM +00:00                                            +000000000 00:00:00.202312
+
+Elapsed: 00:00:00.00
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:00.00
+Auto SPM will look for SQL statements showing up in AWR, so we'll make sure it's there
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:01.12
+old   5:    for i in 1..&1
+new   5:    for i in 1..10
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:46.47
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:00.94
+Search AWR to confirm we have captured the test query
+
+   SNAP_ID PLAN_HASH_VALUE BUFFER_GETS_DELTA
+---------- --------------- -----------------
+       404      2368473642           2625944
+       404      2368473642          26284657
+       405      2368473642           2626393
+       406      2368473642          26261020
+
+Elapsed: 00:00:00.05
+
+TXT                                                                                                  EXECUTIONS BGET_PER_EXEC PLAN_HASH_VALUE
+---------------------------------------------------------------------------------------------------- ---------- ------------- ---------------
+select /* SPM_TEST_QUERY_Q1 */ /*+ NO_ADAPTIVE_PLAN */ sum(t1.amount), sum(t2.am                              1         48791      1785747100
+select /* SPM_TEST_QUERY_Q1 */ /*+ NO_ADAPTIVE_PLAN */ sum(t1.amount), sum(t2.am                              1       2626393      2368473642
+
+Elapsed: 00:00:00.00
+Now waiting for auto SPM to kick in and fix our regression
+Wait for Auto SPM task
+We will shorten the interval temporarily to 2mins
+This is NOT recommended, but is done here for the sake of the demo
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:00.01
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:18.01
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:00.00
+SQL> select /* SPM_TEST_QUERY_Q1 */ /*+ NO_ADAPTIVE_PLAN */ sum(t1.amount), sum(t2.amount)
+  2  from   sales_area1 t1,
+  3         sales_area2 t2
+  4  where  t1.sale_code = t2.sale_code
+  5  and    t1.sale_type  = 10;
+
+SUM(T1.AMOUNT) SUM(T2.AMOUNT)
+-------------- --------------
+    10503770.1      6999997.6
+
+Elapsed: 00:00:02.53
+SQL> set echo off
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------
+SQL_ID  422ar3ttckhah, child number 1
+-------------------------------------
+select /* SPM_TEST_QUERY_Q1 */ /*+ NO_ADAPTIVE_PLAN */ sum(t1.amount),
+sum(t2.amount) from   sales_area1 t1,        sales_area2 t2 where
+t1.sale_code = t2.sale_code and    t1.sale_type  = 10
+
+Plan hash value: 1785747100
+
+-----------------------------------------------------------------------------------
+| Id  | Operation           | Name        | Rows  | Bytes | Cost (%CPU)| Time     |
+-----------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT    |             |       |       | 13344 (100)|          |
+|   1 |  SORT AGGREGATE     |             |     1 |    43 |            |          |
+|*  2 |   HASH JOIN         |             |     3 |   129 | 13344   (1)| 00:00:01 |
+|*  3 |    TABLE ACCESS FULL| SALES_AREA1 |     2 |    30 |  5145   (1)| 00:00:01 |
+|   4 |    TABLE ACCESS FULL| SALES_AREA2 |  4500K|   120M|  8190   (1)| 00:00:01 |
+-----------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   2 - access("T1"."SALE_CODE"="T2"."SALE_CODE")
+   3 - filter("T1"."SALE_TYPE"=10)
+
+Hint Report (identified by operation id / Query Block Name / Object Alias):
+Total hints for statement: 1 (U - Unused (1))
+---------------------------------------------------------------------------
+
+   0 -  STATEMENT
+         U -  NO_ADAPTIVE_PLAN / rejected by IGNORE_OPTIM_EMBEDDED_HINTS
+
+Note
+-----
+   - SQL plan baseline SQL_PLAN_bx28nz04t85r28059011b used for this statement
+
+
+35 rows selected.
+
+Elapsed: 00:00:00.05
+SQL plan baseline data
+
+             SIGNATURE PLAN_NAME                                ACC SQL_TEXT
+---------------------- ---------------------------------------- --- --------------------------------------------------------------------------------
+  13729527994560812770 SQL_PLAN_bx28nz04t85r250adaefd           NO  select /* SPM_TEST_QUERY_Q1 */ /*+ NO_ADAPTIVE_PLAN */ sum(t1.amount), sum(t2.am
+  13729527994560812770 SQL_PLAN_bx28nz04t85r28059011b           YES select /* SPM_TEST_QUERY_Q1 */ /*+ NO_ADAPTIVE_PLAN */ sum(t1.amount), sum(t2.am
+
+Elapsed: 00:00:00.00
+SQL> spool off
