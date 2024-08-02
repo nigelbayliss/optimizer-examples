@@ -19,7 +19,7 @@ A spool file (example.lst) is provided so you can see the expected results of th
 To run the scenario, log into a DBA account and run the script "example.sql"
 
 WARNING! To make the test re-runnable, the AWR repository is purged for 5 days back
-         so that the test query is removed. 
+         so that the test query is removed. See "pawr.sql".
 
 DISCLAIMER:
 - These scripts are provided for educational purposes only.
