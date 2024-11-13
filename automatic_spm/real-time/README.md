@@ -1,5 +1,7 @@
 # Demonstration of Real-time SPM
 
+NOTE! This demo is currently non-functional. I will repair the demo and include a message to that effect here when it's done.
+
 This demonstration is intended for Oracle Database 23ai BaseDB and on-premises Enterprise Edition (when available)
 Note: Real-time SPM is not available in Oracle Database 23ai FREE
 
