@@ -1,4 +1,9 @@
 SQL> @step4
+SQL> --
+SQL> -- *******************************************
+SQL> -- WAIT 15mins between running step3 and step4
+SQL> -- *******************************************
+SQL> --
 SQL> @@cost_bad
 SQL> --
 SQL> -- We are going to manipulate parameters to induce SQL performance issues
@@ -9,7 +14,6 @@ SQL> alter session set optimizer_index_cost_adj = 10000
 
 Session altered.
 
-Elapsed: 00:00:00.00
 SQL> --
 SQL> -- The Note section indicates invalidations
 SQL> -- We've manipulated to cost to cause a plan performance
@@ -22,15 +26,15 @@ SQL>
 SQL> set echo on
 SQL> select /* SPM_TEST_QUERY_Q1 */ sum(t2.amount)
   2  from   sales_area1 t1,
-  3         sales_area2 t2
+  3  	    sales_area2 t2
   4  where  t1.sale_code = t2.sale_code
   5  and    t1.sale_type  = 1;
 
-SUM(T2.AMOUNT)
---------------
-     125090021
+SUM(T2.AMOUNT)                                                                  
+--------------                                                                  
+    3.9996E+10                                                                  
 
-Elapsed: 00:00:06.10
+Elapsed: 00:00:02.25
 SQL> set echo off
 
 PLAN_TABLE_OUTPUT
@@ -46,7 +50,7 @@ NOTE: cannot fetch plan for SQL_ID: g6hqazvppxq6m, CHILD_NUMBER: 1
 
 8 rows selected.
 
-Elapsed: 00:00:00.05
+Elapsed: 00:00:00.04
 SQL> --
 SQL> -- The SQL plan baseline is used
 SQL> --
@@ -62,9 +66,9 @@ SQL> select /* SPM_TEST_QUERY_Q1 */ sum(t2.amount)
 
 SUM(T2.AMOUNT)
 --------------
-     125090021
+    3.9996E+10
 
-Elapsed: 00:00:04.64
+Elapsed: 00:00:01.82
 SQL> set echo off
 
 PLAN_TABLE_OUTPUT
@@ -75,33 +79,37 @@ select /* SPM_TEST_QUERY_Q1 */ sum(t2.amount) from   sales_area1 t1,
     sales_area2 t2 where  t1.sale_code = t2.sale_code and
 t1.sale_type  = 1
 
-Plan hash value: 2727377809
+Plan hash value: 3516044501
 
------------------------------------------------------------------------------------------------------
-| Id  | Operation                             | Name        | Rows  | Bytes | Cost (%CPU)| Time     |
------------------------------------------------------------------------------------------------------
-|   0 | SELECT STATEMENT                      |             |       |       |   149K(100)|          |
-|   1 |  SORT AGGREGATE                       |             |     1 |    33 |            |          |
-|*  2 |   HASH JOIN                           |             |    62M|  1966M|   149K  (1)| 00:00:06 |
-|   3 |    TABLE ACCESS BY INDEX ROWID BATCHED| SALES_AREA1 | 25000 |   170K| 13710   (1)| 00:00:01 |
-|*  4 |     INDEX RANGE SCAN                  | SALES_TYP1I | 25000 |       |   208   (0)| 00:00:01 |
-|   5 |    TABLE ACCESS FULL                  | SALES_AREA2 |  2500K|    61M|   135K  (1)| 00:00:06 |
------------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------
+| Id  | Operation                | Name             | Rows  | Bytes | Cost (%CPU)| Time     |
+---------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT         |                  |       |       |   112K(100)|          |
+|   1 |  SORT AGGREGATE          |                  |     1 |    17 |            |          |
+|*  2 |   HASH JOIN              |                  |    40M|   648M|   112K  (1)| 00:00:05 |
+|*  3 |    VIEW                  | index$_join$_001 | 20000 |   136K|  3799   (1)| 00:00:01 |
+|*  4 |     HASH JOIN            |                  |       |       |            |          |
+|*  5 |      INDEX RANGE SCAN    | SALES_TYP1I      | 20000 |   136K|    38   (0)| 00:00:01 |
+|   6 |      INDEX FAST FULL SCAN| SALES_AREA1I     | 20000 |   136K|  4693   (1)| 00:00:01 |
+|   7 |    TABLE ACCESS FULL     | SALES_AREA2      |  2000K|    19M|   108K  (1)| 00:00:05 |
+---------------------------------------------------------------------------------------------
 
 Predicate Information (identified by operation id):
 ---------------------------------------------------
 
    2 - access("T1"."SALE_CODE"="T2"."SALE_CODE")
-   4 - access("T1"."SALE_TYPE"=1)
+   3 - filter("T1"."SALE_TYPE"=1)
+   4 - access(ROWID=ROWID)
+   5 - access("T1"."SALE_TYPE"=1)
 
 Note
 -----
-   - SQL plan baseline SQL_PLAN_20j5m31t6u71h169efe64 used for this statement
+   - SQL plan baseline SQL_PLAN_20j5m31t6u71h5ef7a68d used for this statement
 
 
-29 rows selected.
+33 rows selected.
 
-Elapsed: 00:00:00.23
+Elapsed: 00:00:00.28
 SQL> --
 SQL> -- We'll force a hard parse and double-check we have the SQL plan baseline
 SQL> --
@@ -110,7 +118,7 @@ SQL> alter system flush shared_pool;
 
 System altered.
 
-Elapsed: 00:00:00.06
+Elapsed: 00:00:00.23
 SQL> @@q
 SQL> set timing on
 SQL> 
@@ -123,9 +131,9 @@ SQL> select /* SPM_TEST_QUERY_Q1 */ sum(t2.amount)
 
 SUM(T2.AMOUNT)
 --------------
-     125090021
+    3.9996E+10
 
-Elapsed: 00:00:05.17
+Elapsed: 00:00:01.90
 SQL> set echo off
 
 PLAN_TABLE_OUTPUT
@@ -136,33 +144,37 @@ select /* SPM_TEST_QUERY_Q1 */ sum(t2.amount) from   sales_area1 t1,
     sales_area2 t2 where  t1.sale_code = t2.sale_code and
 t1.sale_type  = 1
 
-Plan hash value: 2727377809
+Plan hash value: 3516044501
 
------------------------------------------------------------------------------------------------------
-| Id  | Operation                             | Name        | Rows  | Bytes | Cost (%CPU)| Time     |
------------------------------------------------------------------------------------------------------
-|   0 | SELECT STATEMENT                      |             |       |       |   149K(100)|          |
-|   1 |  SORT AGGREGATE                       |             |     1 |    33 |            |          |
-|*  2 |   HASH JOIN                           |             |    62M|  1966M|   149K  (1)| 00:00:06 |
-|   3 |    TABLE ACCESS BY INDEX ROWID BATCHED| SALES_AREA1 | 25000 |   170K| 13710   (1)| 00:00:01 |
-|*  4 |     INDEX RANGE SCAN                  | SALES_TYP1I | 25000 |       |   208   (0)| 00:00:01 |
-|   5 |    TABLE ACCESS FULL                  | SALES_AREA2 |  2500K|    61M|   135K  (1)| 00:00:06 |
------------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------
+| Id  | Operation                | Name             | Rows  | Bytes | Cost (%CPU)| Time     |
+---------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT         |                  |       |       |   112K(100)|          |
+|   1 |  SORT AGGREGATE          |                  |     1 |    17 |            |          |
+|*  2 |   HASH JOIN              |                  |    40M|   648M|   112K  (1)| 00:00:05 |
+|*  3 |    VIEW                  | index$_join$_001 | 20000 |   136K|  3799   (1)| 00:00:01 |
+|*  4 |     HASH JOIN            |                  |       |       |            |          |
+|*  5 |      INDEX RANGE SCAN    | SALES_TYP1I      | 20000 |   136K|    38   (0)| 00:00:01 |
+|   6 |      INDEX FAST FULL SCAN| SALES_AREA1I     | 20000 |   136K|  4693   (1)| 00:00:01 |
+|   7 |    TABLE ACCESS FULL     | SALES_AREA2      |  2000K|    19M|   108K  (1)| 00:00:05 |
+---------------------------------------------------------------------------------------------
 
 Predicate Information (identified by operation id):
 ---------------------------------------------------
 
    2 - access("T1"."SALE_CODE"="T2"."SALE_CODE")
-   4 - access("T1"."SALE_TYPE"=1)
+   3 - filter("T1"."SALE_TYPE"=1)
+   4 - access(ROWID=ROWID)
+   5 - access("T1"."SALE_TYPE"=1)
 
 Note
 -----
-   - SQL plan baseline SQL_PLAN_20j5m31t6u71h169efe64 used for this statement
+   - SQL plan baseline SQL_PLAN_20j5m31t6u71h5ef7a68d used for this statement
 
 
-29 rows selected.
+33 rows selected.
 
-Elapsed: 00:00:01.34
+Elapsed: 00:00:00.58
 SQL> @@diag
 SQL> column plan_name format a40
 SQL> --
@@ -193,9 +205,9 @@ SQL> select p.plan_name, p.foreground_last_verified, pfspm.status result, pfspm.
 
 PLAN_NAME                                FOREGROUND_LAST_VERIFIED                                                    RESULT   VERIFY_T
 ---------------------------------------- --------------------------------------------------------------------------- -------- --------
-SQL_PLAN_20j5m31t6u71h8059011b           02-JUL-24 12.35.32.000000 PM                                                worse    normal
-SQL_PLAN_20j5m31t6u71h169efe64           02-JUL-24 12.35.37.000000 PM                                                better   reverse
+SQL_PLAN_20j5m31t6u71h8059011b           14-NOV-24 12.47.36.000000 PM                                                worse    normal
+SQL_PLAN_20j5m31t6u71h5ef7a68d           14-NOV-24 12.47.38.000000 PM                                                better   reverse
 
-Elapsed: 00:00:00.16
+Elapsed: 00:00:00.05
 SQL> 
 SQL> spool off
