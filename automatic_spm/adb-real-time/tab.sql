@@ -6,6 +6,10 @@ set echo on
 drop table if exists sales_area1 purge;
 drop table if exists sales_area2 purge;
 
+-- If you are using 19c, you will need to comment out the following two lines
+-- drop table sales_area1 purge;
+-- drop table sales_area2 purge;
+
 create table sales_area1 (sale_code number(10), b varchar2(2000), amount number(10,2), sale_type number(10), c varchar2(1000));
 
 

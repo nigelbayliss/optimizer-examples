@@ -1,6 +1,8 @@
 # Demonstration of Real-time SPM
 
-This demonstration is intended for use in Oracle Database 23ai Autonomous Database (Transaction Processing)
+This demonstration is intended for use in Oracle Autonomous Database 23ai (Transaction Processing)
+
+The demo will work in Oracle Autonmous Database 19c, too, but see "tab.sql" for the minor edit you will need.
 
 Execute these tests in the ADMIN account.
 
