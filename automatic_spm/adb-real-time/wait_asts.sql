@@ -1,12 +1,12 @@
 --
--- Wait for the Auto SQL Tuning Set Capture Task to complete
+-- Wait for the Auto SQL Tuning Set Capture Task
 --
 prompt Waiting for Auto SQL Tuning Set Capture...
-prompt By default, this is 15mins, but we will temporarilty shorten it to two mins speed things up
-prompt This change is not normally recommened, but it is used for the sake of demonstration
+prompt By defauult, this is 15mins, but we'll temporarilty shorten it to two mins speed things up
 --
 exec dbms_auto_task_admin.modify_autotask_setting('Auto STS Capture Task', 'INTERVAL', 120)
 --
+@@task
 declare
    lasttime timestamp ;
    thistime timestamp ;

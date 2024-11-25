@@ -1,0 +1,271 @@
+SQL> set echo on
+SQL> @step2_dbrm
+SQL> @@dbrm_on
+SQL> --
+SQL> -- For the sake of this experiment, we'll set the
+SQL> -- maximum runtime for a SQL statement to 15 seconds
+SQL> --
+SQL> BEGIN
+  2  	CS_RESOURCE_MANAGER.UPDATE_PLAN_DIRECTIVE(
+  3  	   consumer_group => 'LOW',
+  4  	   elapsed_time_limit => 15);
+  5  END;
+  6  /
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> @@plan_bad
+SQL> --
+SQL> -- Allow hints in the SQL statement to induce a bad plan
+SQL> --
+SQL> alter session set optimizer_ignore_hints = false;
+
+Session altered.
+
+SQL> /
+
+Session altered.
+
+SQL> --
+SQL> -- The Note section indicates invalidations
+SQL> -- We've manipulated to cost to cause a plan performance
+SQL> -- regression. Real-time SPM will detect the plan change
+SQL> -- and reinstate the old plan.
+SQL> --
+SQL> @@q
+SQL> set timing on
+SQL> 
+SQL> set echo on
+SQL> select /* SPM_TEST_QUERY_Q1 */ /*+ USE_NL(t1) LEADING(t2 t1) */ sum(t2.amount)
+  2  from   sales_area1 t1,
+  3  	    sales_area2 t2
+  4  where  t1.sale_code = t2.sale_code
+  5  and    t1.sale_type  = 1;
+where  t1.sale_code = t2.sale_code
+                      *
+ERROR at line 4:
+ORA-56735: elapsed time limit exceeded - call aborted 
+
+
+Elapsed: 00:00:14.82
+SQL> set echo off
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  dz4jrwhujtb93, child number 3
+
+An uncaught error happened in prepare_sql_statement : ORA-01403: no data found
+
+NOTE: cannot fetch plan for SQL_ID: dz4jrwhujtb93, CHILD_NUMBER: 3
+      Please verify value of SQL_ID and CHILD_NUMBER;
+      It could also be that the plan is no longer in cursor cache (check v$sql_plan)
+
+
+8 rows selected.
+
+Elapsed: 00:00:00.08
+SQL> --
+SQL> -- The SQL plan baseline is used
+SQL> --
+SQL> @@q
+SQL> set timing on
+SQL> 
+SQL> set echo on
+SQL> select /* SPM_TEST_QUERY_Q1 */ /*+ USE_NL(t1) LEADING(t2 t1) */ sum(t2.amount)
+  2  from   sales_area1 t1,
+  3         sales_area2 t2
+  4  where  t1.sale_code = t2.sale_code
+  5  and    t1.sale_type  = 1;
+
+SUM(T2.AMOUNT)
+--------------
+    112320.834
+
+Elapsed: 00:00:00.07
+SQL> set echo off
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  dz4jrwhujtb93, child number 4
+-------------------------------------
+select /* SPM_TEST_QUERY_Q1 */ /*+ USE_NL(t1) LEADING(t2 t1) */
+sum(t2.amount) from   sales_area1 t1,        sales_area2 t2 where
+t1.sale_code = t2.sale_code and    t1.sale_type  = 1
+
+Plan hash value: 578465878
+
+------------------------------------------------------------------------------------------------------
+| Id  | Operation                              | Name        | Rows  | Bytes | Cost (%CPU)| Time     |
+------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT                       |             |       |       |  4572 (100)|          |
+|   1 |  SORT AGGREGATE                        |             |     1 |    33 |            |          |
+|*  2 |   HASH JOIN                            |             | 55583 |  1791K|  4572   (1)| 00:00:01 |
+|   3 |    JOIN FILTER CREATE                  | :BF0000     |   750 |  5250 |   460   (0)| 00:00:01 |
+|   4 |     TABLE ACCESS BY INDEX ROWID BATCHED| SALES_AREA1 |   750 |  5250 |   460   (0)| 00:00:01 |
+|*  5 |      INDEX RANGE SCAN                  | SALES_TYP1I |   750 |       |    10   (0)| 00:00:01 |
+|   6 |    JOIN FILTER USE                     | :BF0000     | 75000 |  1904K|  4112   (1)| 00:00:01 |
+|*  7 |     TABLE ACCESS STORAGE FULL          | SALES_AREA2 | 75000 |  1904K|  4112   (1)| 00:00:01 |
+------------------------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   2 - access("T1"."SALE_CODE"="T2"."SALE_CODE")
+   5 - access("T1"."SALE_TYPE"=1)
+   7 - storage(SYS_OP_BLOOM_FILTER(:BF0000,"T2"."SALE_CODE"))
+       filter(SYS_OP_BLOOM_FILTER(:BF0000,"T2"."SALE_CODE"))
+
+Hint Report (identified by operation id / Query Block Name / Object Alias):
+Total hints for statement: 2 (U - Unused (2))
+---------------------------------------------------------------------------
+
+   1 -  SEL$1
+         U -  LEADING(t2 t1) / rejected by IGNORE_OPTIM_EMBEDDED_HINTS
+
+   4 -  SEL$1 / "T1"@"SEL$1"
+         U -  USE_NL(t1) / rejected by IGNORE_OPTIM_EMBEDDED_HINTS
+
+Note
+-----
+   - SQL plan baseline SQL_PLAN_9mmnzp9rptjrr8b7ec007 used for this statement
+
+
+43 rows selected.
+
+Elapsed: 00:00:00.13
+SQL> --
+SQL> -- We'll force a hard parse and double-check we have the SQL plan baseline
+SQL> --
+SQL> @@flush
+SQL> --
+SQL> -- Invalidate dependent cursors with NO_INVALIDATE=FALSE
+SQL> --
+SQL> exec dbms_stats.gather_table_stats(user,'sales_area1',method_opt=>'for all columns size 254',no_invalidate=>false)
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:00.76
+SQL> exec dbms_stats.gather_table_stats(user,'sales_area2',method_opt=>'for all columns size 254',no_invalidate=>false)
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:00.89
+SQL> 
+SQL> @@q
+SQL> set timing on
+SQL> 
+SQL> set echo on
+SQL> select /* SPM_TEST_QUERY_Q1 */ /*+ USE_NL(t1) LEADING(t2 t1) */ sum(t2.amount)
+  2  from   sales_area1 t1,
+  3         sales_area2 t2
+  4  where  t1.sale_code = t2.sale_code
+  5  and    t1.sale_type  = 1;
+
+SUM(T2.AMOUNT)
+--------------
+    112320.834
+
+Elapsed: 00:00:00.07
+SQL> set echo off
+
+PLAN_TABLE_OUTPUT
+----------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  dz4jrwhujtb93, child number 4
+-------------------------------------
+select /* SPM_TEST_QUERY_Q1 */ /*+ USE_NL(t1) LEADING(t2 t1) */
+sum(t2.amount) from   sales_area1 t1,        sales_area2 t2 where
+t1.sale_code = t2.sale_code and    t1.sale_type  = 1
+
+Plan hash value: 578465878
+
+------------------------------------------------------------------------------------------------------
+| Id  | Operation                              | Name        | Rows  | Bytes | Cost (%CPU)| Time     |
+------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT                       |             |       |       |  4572 (100)|          |
+|   1 |  SORT AGGREGATE                        |             |     1 |    33 |            |          |
+|*  2 |   HASH JOIN                            |             | 55583 |  1791K|  4572   (1)| 00:00:01 |
+|   3 |    JOIN FILTER CREATE                  | :BF0000     |   750 |  5250 |   460   (0)| 00:00:01 |
+|   4 |     TABLE ACCESS BY INDEX ROWID BATCHED| SALES_AREA1 |   750 |  5250 |   460   (0)| 00:00:01 |
+|*  5 |      INDEX RANGE SCAN                  | SALES_TYP1I |   750 |       |    10   (0)| 00:00:01 |
+|   6 |    JOIN FILTER USE                     | :BF0000     | 75000 |  1904K|  4112   (1)| 00:00:01 |
+|*  7 |     TABLE ACCESS STORAGE FULL          | SALES_AREA2 | 75000 |  1904K|  4112   (1)| 00:00:01 |
+------------------------------------------------------------------------------------------------------
+
+Predicate Information (identified by operation id):
+---------------------------------------------------
+
+   2 - access("T1"."SALE_CODE"="T2"."SALE_CODE")
+   5 - access("T1"."SALE_TYPE"=1)
+   7 - storage(SYS_OP_BLOOM_FILTER(:BF0000,"T2"."SALE_CODE"))
+       filter(SYS_OP_BLOOM_FILTER(:BF0000,"T2"."SALE_CODE"))
+
+Hint Report (identified by operation id / Query Block Name / Object Alias):
+Total hints for statement: 2 (U - Unused (2))
+---------------------------------------------------------------------------
+
+   1 -  SEL$1
+         U -  LEADING(t2 t1) / rejected by IGNORE_OPTIM_EMBEDDED_HINTS
+
+   4 -  SEL$1 / "T1"@"SEL$1"
+         U -  USE_NL(t1) / rejected by IGNORE_OPTIM_EMBEDDED_HINTS
+
+Note
+-----
+   - SQL plan baseline SQL_PLAN_9mmnzp9rptjrr8b7ec007 used for this statement
+
+
+43 rows selected.
+
+Elapsed: 00:00:00.13
+SQL> @@diag
+SQL> column plan_name format a40
+SQL> --
+SQL> -- 'worse' means that a plan that's just been executed is worse than a plan in ASTS
+SQL> -- 'better' means that a plan that's just been executed is better than a plan in ASTS
+SQL> -- 'normal' means a plan changed has been spotted and is being verified against a plan in ASTS
+SQL> -- 'reverse' means a reverse verification check is being made to ensure the plan previously chosen from ASTS out-performs the previously-rejected new plan
+SQL> --
+SQL> select p.plan_name, p.foreground_last_verified, pfspm.status result, pfspm.ver verify_type
+  2  from dba_sql_plan_baselines p,
+  3      XMLTABLE(
+  4           '/notes'
+  5           passing xmltype(p.notes)
+  6           columns
+  7               plan_id         NUMBER    path 'plan_id',
+  8               flags           NUMBER    path 'flags',
+  9               fg_spm          XMLType   path 'fg_spm') pf,
+ 10       XMLTABLE(
+ 11           '/fg_spm'
+ 12           passing pf.fg_spm
+ 13           columns
+ 14               ver             VARCHAR2(8)    path 'ver',
+ 15               status          VARCHAR2(8)    path 'status') pfspm
+ 16  where notes is not null
+ 17  and sql_text like 'select /* SPM_TEST_QUERY_Q1%'
+ 18  order by p.foreground_last_verified
+ 19  ;
+
+PLAN_NAME                                FOREGROUND_LAST_VERIFIED                                                    RESULT   VERIFY_T
+---------------------------------------- --------------------------------------------------------------------------- -------- --------
+SQL_PLAN_9mmnzp9rptjrr55c864d5           25-NOV-24 01.35.30.000000 PM                                                worse    normal
+
+Elapsed: 00:00:00.02
+SQL> 
+SQL> 
+SQL> @@dbrm_off
+SQL> --
+SQL> -- Remove the elapsed time limit
+SQL> --
+SQL> BEGIN
+  2     CS_RESOURCE_MANAGER.UPDATE_PLAN_DIRECTIVE(
+  3        consumer_group => 'LOW',
+  4        elapsed_time_limit => NULL);
+  5  END;
+  6  /
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:00.14
+SQL> 
+SQL> exit

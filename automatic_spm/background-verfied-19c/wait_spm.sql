@@ -9,7 +9,7 @@ declare
    lasttime timestamp ;
    thistime timestamp ;
    executed boolean := false;
-   sts varchar2(20);
+   sts varchar2(20) := '-';
    cursor c1 is
       select last_schedule_time,status
       into   thistime,sts
@@ -17,9 +17,12 @@ declare
       where  dbid = sys_context('userenv','con_dbid')
       and    task_name = 'Auto SPM Task';
 begin
-   open c1;
-   fetch c1 into lasttime,sts;
-   close c1;
+   while sts != 'RUNNING'
+   loop
+      open c1;
+      fetch c1 into lasttime,sts;
+      close c1;
+   end loop;
    while not executed
    loop 
       open c1;
