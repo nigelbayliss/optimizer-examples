@@ -16,7 +16,7 @@ Session altered.
 Elapsed: 00:00:00.02
 SQL> --
 SQL> -- The Note section indicates invalidations
-SQL> -- We've manipulated to cost to cause a plan performance
+SQL> -- We've manipulated the plan with hints to cause a performance
 SQL> -- regression. Real-time SPM will detect the plan change
 SQL> -- and reinstate the old plan.
 SQL> --
