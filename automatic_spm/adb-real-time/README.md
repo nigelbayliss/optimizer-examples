@@ -4,7 +4,7 @@ This demonstration is intended for use in Oracle Autonomous Database 23ai (Trans
 
 The demo will work in Oracle Autonmous Database 19c, too, but see "tab.sql" for the minor edit you will need.
 
-Execute these tests in the ADMIN account.
+Execute these tests in the ADMIN account and for database resource manager to kick in with this example, you must be connecting via the LOW consumer group.
 
 Spool files (*.lst) are provided so you can see the expected results of the tests.
 
