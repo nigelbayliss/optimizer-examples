@@ -8,35 +8,35 @@ exec dbms_auto_task_admin.modify_autotask_setting('Auto STS Capture Task', 'INTE
 --
 @@task
 declare
-   lasttime timestamp ;
-   thistime timestamp ;
-   executed boolean := false;
-   sts varchar2(20) := '-';
-   cursor c1 is
-      select last_schedule_time,status
-      into   thistime,sts
-      from   dba_autotask_schedule_control 
-      where  dbid = sys_context('userenv','con_dbid')
-      and    task_name = 'Auto STS Capture Task';
+    lasttime timestamp ;
+    thistime timestamp ;
+    executed boolean := false;
+    sts varchar2(20);
+    n number := 0;
+    cursor c1 is
+        select last_schedule_time,status
+        into   thistime,sts
+        from   dba_autotask_schedule_control 
+        where  dbid = sys_context('userenv','con_dbid')
+        and    task_name = 'Auto STS Capture Task';
 begin
-   while sts != 'RUNNING'
-   loop
-      open c1;
-      fetch c1 into lasttime,sts;
-      close c1;
-   end loop;
-   while not executed
-   loop 
-      open c1;
-      fetch c1 into thistime,sts;
-      close c1;
-      if thistime>lasttime and sts = 'SUCCEEDED'
-      then
-         executed := true;
-      else
-         dbms_lock.sleep(2);
-      end if; 
-   end loop;
+    open c1;
+    fetch c1 into lasttime,sts;
+    close c1;
+    while not executed
+    loop 
+        open c1;
+        fetch c1 into thistime,sts;
+        close c1;
+        if thistime>lasttime and sts = 'SUCCEEDED' and n > 0
+        then
+            executed := true;
+        else
+            dbms_lock.sleep(2);
+        end if;
+        lasttime := thistime; 
+        n := n + 1;
+    end loop;
 end;
 /
 --
