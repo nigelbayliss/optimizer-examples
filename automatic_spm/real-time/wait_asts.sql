@@ -34,7 +34,6 @@ begin
         else
             dbms_lock.sleep(2);
         end if;
-        lasttime := thistime; 
         n := n + 1;
     end loop;
 end;
