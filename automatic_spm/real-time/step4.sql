@@ -1,8 +1,4 @@
---
--- *******************************************
--- WAIT 15mins between running step3 and step4
--- *******************************************
---
+@@flush
 @@cost_bad
 --
 -- The Note section indicates invalidations

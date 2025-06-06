@@ -26,7 +26,7 @@ commit;
 create table sales_area2 as select sale_code,b,rownum/1000 amount,sale_type,c from sales_area1;
 
 create index sales_area1i on sales_area1 (sale_code);
-create index sales_area2i on sales_area2 (sale_code);
+--create index sales_area2i on sales_area2 (sale_code);
 create index sales_typ1i on sales_area1 (sale_type);
 create index sales_typ2i on sales_area2 (sale_type);
 --

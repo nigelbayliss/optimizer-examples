@@ -1,9 +1,5 @@
---
--- *******************************************
--- WAIT 15mins between running step1 and step2
--- *******************************************
---
-@@cost_default
+@@flush
+@@cost_good
 --
 -- The Note section indicates real-time SPM is active
 -- This new plan is better than the old plan, and we 

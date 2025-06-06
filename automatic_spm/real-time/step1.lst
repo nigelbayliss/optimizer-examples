@@ -1,45 +1,11 @@
-SQL> @step1
-SQL> --
-SQL> -- Example:
-SQL> --    Initial plan is poor
-SQL> --    New plan is better
-SQL> -- Run this script followed by step2.sql
-SQL> --
-SQL> -- Reset test - clear out SQL plan baselines and the auto SQL tuning set
-SQL> --
-SQL> @@reset
-SQL> DECLARE
-  2    l_plans_dropped	PLS_INTEGER;
-  3  BEGIN
-  4  
-  5    FOR REC IN (SELECT DISTINCT SQL_HANDLE FROM DBA_SQL_PLAN_BASELINES WHERE sql_text LIKE 'select /* SPM_TEST_QUERY_Q1 */%')
-  6    LOOP
-  7  	   L_PLANS_DROPPED := DBMS_SPM.DROP_SQL_PLAN_BASELINE (
-  8  	     sql_handle => rec.sql_handle,
-  9  	     PLAN_NAME	=> NULL);
- 10    END LOOP;
- 11  
- 12  END;
- 13  /
+PL/SQL procedure successfully completed.
+
 
 PL/SQL procedure successfully completed.
 
-SQL> 
-SQL> exec dbms_sqltune.delete_sqlset(sqlset_name=>'SYS_AUTO_STS',basic_filter=>'sql_text LIKE ''select /* SPM_TEST_QUERY_Q1 */%''',sqlset_owner=>'SYS')
-
-PL/SQL procedure successfully completed.
-
-SQL> 
-SQL> @@flush
-SQL> alter system flush shared_pool;
 
 System altered.
 
-SQL> --
-SQL> -- Create tables
-SQL> --
-SQL> @@tab
-SQL> set echo on
 SQL> --
 SQL> -- Create two tables
 SQL> --
@@ -94,10 +60,7 @@ SQL> create index sales_area1i on sales_area1 (sale_code);
 
 Index created.
 
-SQL> create index sales_area2i on sales_area2 (sale_code);
-
-Index created.
-
+SQL> --create index sales_area2i on sales_area2 (sale_code);
 SQL> create index sales_typ1i on sales_area1 (sale_type);
 
 Index created.
@@ -152,11 +115,11 @@ SQL> select /* SPM_TEST_QUERY_Q1 */ sum(t2.amount)
   4  where  t1.sale_code = t2.sale_code
   5  and    t1.sale_type  = 1;
 
-SUM(T2.AMOUNT)                                                                  
---------------                                                                  
-    3.9996E+10                                                                  
+SUM(T2.AMOUNT)
+--------------
+    3.9996E+10
 
-Elapsed: 00:00:02.20
+Elapsed: 00:00:02.19
 SQL> set echo off
 
 PLAN_TABLE_OUTPUT
@@ -188,7 +151,7 @@ Predicate Information (identified by operation id):
 
 24 rows selected.
 
-Elapsed: 00:00:00.28
+Elapsed: 00:00:00.41
 SQL> @@q
 SQL> set timing on
 SQL> 
@@ -245,14 +208,14 @@ SQL> -- Wait for the Auto SQL Tuning Set Capture Task
 SQL> --
 SQL> prompt Waiting for Auto SQL Tuning Set Capture...
 Waiting for Auto SQL Tuning Set Capture...
-SQL> prompt By defauult, this is 15mins, but we'll temporarilty shorten it to two mins speed things up
-By defauult, this is 15mins, but we'll temporarilty shorten it to two mins speed things up
+SQL> prompt By default, this is 15mins, but we'll temporarilty shorten it to two mins speed things up
+By default, this is 15mins, but we'll temporarilty shorten it to two mins speed things up
 SQL> --
 SQL> exec dbms_auto_task_admin.modify_autotask_setting('Auto STS Capture Task', 'INTERVAL', 120)
 
 PL/SQL procedure successfully completed.
 
-Elapsed: 00:00:00.01
+Elapsed: 00:00:00.02
 SQL> --
 SQL> @@task
 SQL> set pagesize 1000
@@ -264,7 +227,7 @@ SQL> select current_timestamp now from dual;
 
 NOW
 ---------------------------------------------------------------------------
-14-NOV-24 11.48.33.486854 AM +00:00
+06-JUN-25 02.56.30.460319 PM +00:00
 
 Elapsed: 00:00:00.00
 SQL> 
@@ -272,46 +235,51 @@ SQL>
 SQL> select task_name, interval,status, last_schedule_time, systimestamp-last_schedule_time ago
   2  from dba_autotask_schedule_control
   3  where dbid = sys_context('userenv','con_dbid')
-  4  and task_name = 'Auto STS Capture Task';
+  4  and (task_name = 'Auto STS Capture Task'
+  5       or
+  6       task_name = 'Auto SPM Task');
 
 TASK_NAME                        INTERVAL STATUS     LAST_SCHEDULE_TIME                                                          AGO
 ------------------------------ ---------- ---------- --------------------------------------------------------------------------- ---------------------------------------------------------------------------
-Auto STS Capture Task                 120 SUCCEEDED  14-NOV-24 11.43.41.614 AM +00:00                                            +000000000 00:04:51.902966
+Auto STS Capture Task                 120 SUCCEEDED  06-JUN-25 02.51.52.692 PM +00:00                                            +000000000 00:04:37.819738
+Auto SPM Task                        3600 SUCCEEDED  06-JUN-25 02.26.45.464 PM +00:00                                            +000000000 00:29:45.047738
 
-Elapsed: 00:00:00.03
+Elapsed: 00:00:00.05
 SQL> declare
-  2     lasttime timestamp ;
-  3     thistime timestamp ;
-  4     executed boolean := false;
-  5     sts varchar2(20);
-  6     cursor c1 is
-  7        select last_schedule_time,status
-  8        into   thistime,sts
-  9        from   dba_autotask_schedule_control
- 10        where  dbid = sys_context('userenv','con_dbid')
- 11        and    task_name = 'Auto STS Capture Task';
- 12  begin
- 13     open c1;
- 14     fetch c1 into lasttime,sts;
- 15     close c1;
- 16     while not executed
- 17     loop
- 18        open c1;
- 19        fetch c1 into thistime,sts;
- 20        close c1;
- 21        if thistime>lasttime and sts = 'SUCCEEDED'
- 22        then
- 23           executed := true;
- 24        else
- 25           dbms_lock.sleep(2);
- 26        end if;
- 27     end loop;
- 28  end;
- 29  /
+  2      lasttime timestamp ;
+  3      thistime timestamp ;
+  4      executed boolean := false;
+  5      sts varchar2(20);
+  6      n number := 0;
+  7      cursor c1 is
+  8          select last_schedule_time,status
+  9          into   thistime,sts
+ 10          from   dba_autotask_schedule_control
+ 11          where  dbid = sys_context('userenv','con_dbid')
+ 12          and    task_name = 'Auto STS Capture Task';
+ 13  begin
+ 14      open c1;
+ 15      fetch c1 into lasttime,sts;
+ 16      close c1;
+ 17      while not executed
+ 18      loop
+ 19          open c1;
+ 20          fetch c1 into thistime,sts;
+ 21          close c1;
+ 22          if thistime>lasttime and sts = 'SUCCEEDED' and n > 0
+ 23          then
+ 24              executed := true;
+ 25          else
+ 26              dbms_lock.sleep(2);
+ 27          end if;
+ 28          n := n + 1;
+ 29      end loop;
+ 30  end;
+ 31  /
 
 PL/SQL procedure successfully completed.
 
-Elapsed: 00:00:14.01
+Elapsed: 00:00:24.04
 SQL> --
 SQL> @@task
 SQL> set pagesize 1000
@@ -323,7 +291,7 @@ SQL> select current_timestamp now from dual;
 
 NOW
 ---------------------------------------------------------------------------
-14-NOV-24 11.48.47.532296 AM +00:00
+06-JUN-25 02.56.54.553117 PM +00:00
 
 Elapsed: 00:00:00.00
 SQL> 
@@ -331,11 +299,14 @@ SQL>
 SQL> select task_name, interval,status, last_schedule_time, systimestamp-last_schedule_time ago
   2  from dba_autotask_schedule_control
   3  where dbid = sys_context('userenv','con_dbid')
-  4  and task_name = 'Auto STS Capture Task';
+  4  and (task_name = 'Auto STS Capture Task'
+  5       or
+  6       task_name = 'Auto SPM Task');
 
 TASK_NAME                        INTERVAL STATUS     LAST_SCHEDULE_TIME                                                          AGO
 ------------------------------ ---------- ---------- --------------------------------------------------------------------------- ---------------------------------------------------------------------------
-Auto STS Capture Task                 120 SUCCEEDED  14-NOV-24 11.48.45.321 AM +00:00                                            +000000000 00:00:02.211710
+Auto STS Capture Task                 120 SUCCEEDED  06-JUN-25 02.56.53.301 PM +00:00                                            +000000000 00:00:01.252500
+Auto SPM Task                        3600 SUCCEEDED  06-JUN-25 02.26.45.464 PM +00:00                                            +000000000 00:30:09.089500
 
 Elapsed: 00:00:00.00
 SQL> --
@@ -366,10 +337,10 @@ SQL> select substr(sql_text,1,100) txt,executions,decode(executions,0,-1,round(b
 
 TXT                                                                                                  EXECUTIONS BGET_PER_EXEC PLAN_HASH_VALUE     EXACT_MATCHING_SIGNATURE
 ---------------------------------------------------------------------------------------------------- ---------- ------------- --------------- ----------------------------
-select /* SPM_TEST_QUERY_Q1 */ sum(t2.amount)                                                                 2        802880      1785747100          2325180225210358832
+select /* SPM_TEST_QUERY_Q1 */ sum(t2.amount)                                                                 2        800524      1785747100          2325180225210358832
 from   sales_area1 t1,
        sale
 
 
 Elapsed: 00:00:00.07
-SQL> spool off
+

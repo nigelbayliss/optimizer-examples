@@ -18,7 +18,7 @@ Scenario:
 - There is a plan change and the new plan performs better. 
 - The SQL plan baseline for the new plan is accepted.
 
-To run example 1, log into a DBA account and run step1.sql, *wait 15 minues* and then run step2.sql
+To run example 1, log into a DBA account and run step1.sql and then run step2.sql
 
 ## Example 2
 
@@ -29,7 +29,7 @@ Scenario:
 - The SQL plan baseline for the old plan is accepted to fix the SQL performance regression.
 - A reverse verification step is performed to confirm the reistated old plan definitely out-performs the new (poor) plan.
 
-To run example 2, log into a DBA account and run step3.sql, *wait 15 minutes* and then run step4.sql
+To run example 2, log into a DBA account and run step3.sql and then run step4.sql
 
 DISCLAIMER:
 - These scripts are provided for educational purposes only.
