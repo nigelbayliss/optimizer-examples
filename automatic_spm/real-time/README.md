@@ -47,7 +47,7 @@ Note
    - SQL plan baseline SQL_PLAN_20j5m31t6u71h5ef7a68d used for this statement
 ```
 
-You can see the good and bad plans if you run planb.sql (see planb.lst). Plan name SQL_PLAN_20j5m31t6u71h5ef7a68d is the OLD good plan and SQL_PLAN_20j5m31t6u71h8059011b is the NEW bad plan. The former is marked "Accepted: YES".  
+You can see the good and bad plans if you run planb.sql (see planb.lst). Plan name SQL_PLAN_20j5m31t6u71h5ef7a68d is the OLD good plan and SQL_PLAN_20j5m31t6u71h8059011b is the NEW bad plan. The former is marked "Accepted: YES" (see planb.lst).  
 
 At the end of step4, you will see the two SQL plan baselines listed.
 
