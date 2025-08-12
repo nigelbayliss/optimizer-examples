@@ -1,4 +1,4 @@
-Demo to debunk the idea that if you don't gather statistics, plans will no change.
+Demo to debunk the idea that if you don't gather statistics, plans will not change.
 
 The script is designed to run in SQL Plus
 
@@ -13,7 +13,7 @@ table (and its columns) do not reflect the fact that this value exists
 in the database. This results in a cardinaality misestimate because the
 optimizer believes that no rows have V2 = 10000
 
-You might not to adjust the script in some cases because the
+You might need to adjust the script in some cases because the
 choice of plan is sensitive to your database environment.
 
 ### DISCLAIMER
