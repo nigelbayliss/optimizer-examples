@@ -1,0 +1,380 @@
+SQL> @i1
+======================================
+Create a partitioned table
+The virtual column makes stats gather
+slow if we visit every row of the table
+
+This makes it very obvious if we use
+synopses to generate global-level
+statistics because the gather time
+will be much lower because we won't
+need to visit all of the rows in the table
+======================================
+
+PL/SQL procedure successfully completed.
+
+
+Table created.
+
+
+Function created.
+
+
+PL/SQL procedure successfully completed.
+
+
+50000 rows created.
+
+
+Commit complete.
+
+
+50000 rows created.
+
+
+Commit complete.
+
+
+50000 rows created.
+
+
+Commit complete.
+
+
+50000 rows created.
+
+
+Commit complete.
+
+
+50000 rows created.
+
+
+Commit complete.
+
+=================================
+Gathering full stats on this table will take
+some time because of the LN virtual column
+=================================
+SQL> exec dbms_stats.gather_table_stats(user,'sales_data')
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:17.58
+SQL> set echo off
+=================================
+Row counts
+=================================
+
+PARTITION_NAME                             NUM_ROWS
+---------------------------------------- ----------
+P2020                                         50000
+P2021                                         50000
+P2022                                         50000
+P2023                                         50000
+P2024                                         50000
+
+=================================
+Sample data
+=================================
+
+TXN_DATE      AMOUNT  AMOUNT_LN
+--------- ---------- ----------
+05-MAR-20    2960.19 7.99300873
+05-MAR-20    5699.68 8.64816531
+05-MAR-20    6607.29 8.79592886
+05-MAR-20    2184.55 7.68916514
+05-MAR-20    6544.33  8.7863543
+05-MAR-20    2430.52 7.79586051
+05-MAR-20     921.27 6.82575315
+05-MAR-20    5812.99 8.66785035
+05-MAR-20     7917.5 8.97683078
+05-MAR-20     966.59 6.87377441
+
+10 rows selected.
+
+=================================
+Non-incremental table with
+fresh statistics
+=================================
+
+TABLE_NAME                               PARTITION_NAME                           STALE_S
+---------------------------------------- ---------------------------------------- -------
+SALES_DATA                               P2020                                    NO
+SALES_DATA                               P2021                                    NO
+SALES_DATA                               P2022                                    NO
+SALES_DATA                               P2023                                    NO
+SALES_DATA                               P2024                                    NO
+SALES_DATA                                                                        NO
+
+6 rows selected.
+
+
+Function dropped.
+
+SQL> @i2
+========================================
+Set up the table for incremental stats
+========================================
+SQL> BEGIN
+  2    DBMS_STATS.SET_TABLE_PREFS(
+  3      ownname => USER,
+  4      tabname => 'SALES_DATA',
+  5      pname   => 'INCREMENTAL',
+  6      pvalue  => 'TRUE'
+  7    );
+  8  END;
+  9  /
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> BEGIN
+  2    DBMS_STATS.SET_TABLE_PREFS(
+  3      ownname => USER,
+  4      tabname => 'SALES_DATA',
+  5      pname   => 'INCREMENTAL_LEVEL',
+  6      pvalue  => 'PARTITION'
+  7    );
+  8  END;
+  9  /
+
+PL/SQL procedure successfully completed.
+
+SQL> set echo off
+SQL> @i3
+========================================
+Sleep for a few seconds because we want
+to see a clear difference in LAST_GATHERED
+times (comparing the partition-level
+gather times with the global time)
+========================================
+SQL> exec dbms_lock.sleep(10);
+
+PL/SQL procedure successfully completed.
+
+SQL> set echo off
+========================================
+NOTES is NULL - no synopses
+========================================
+
+PARTITION_NAME                           NOTES
+---------------------------------------- ---------------------------------------------------------------------------------
+P2020
+P2021
+P2022
+P2023
+P2024
+
+========================================
+We can gather partition-level statistics
+over a period of time if necessary  prompt creating synopses as we go.
+
+If statistics are being gathered on
+the table during this period of time (e.g. using auto stats),
+you might need to adjust how this is done. For example,
+you could change the table's GRANULARITY
+preference to GLOBAL, allowing
+partition-level statistics to be created/updated
+using this piecemeal approach without interference.
+If you use a acript to gather stats on the
+relevant table, this will need to be changed during
+the process.
+========================================
+SQL> -- Gather per-partition statistics only
+SQL> DECLARE
+  2    v_owner   VARCHAR2(128) := USER;          -- or set to your schema name
+  3    v_table   VARCHAR2(128) := 'SALES_DATA';  -- target table
+  4  BEGIN
+  5    FOR p IN (
+  6      SELECT partition_name
+  7      FROM   all_tab_partitions
+  8      WHERE  table_owner = v_owner
+  9      AND    table_name  = v_table
+ 10      ORDER  BY partition_position
+ 11    )
+ 12    LOOP
+ 13      DBMS_STATS.GATHER_TABLE_STATS(
+ 14        ownname          => v_owner,
+ 15        tabname          => v_table,
+ 16        partname         => p.partition_name,
+ 17        estimate_percent => DBMS_STATS.AUTO_SAMPLE_SIZE,
+ 18        method_opt       => 'FOR ALL COLUMNS SIZE AUTO',
+ 19        granularity      => 'PARTITION',   -- do not touch global/table stats
+ 20        cascade          => TRUE,          -- include indexes in this partition
+ 21        no_invalidate    => DBMS_STATS.AUTO_INVALIDATE
+ 22      );
+ 23    END LOOP;
+ 24  END;
+ 25  /
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:08.85
+SQL> set echo off
+========================================
+NOTES is NOT NULL - we now have synopses
+========================================
+
+PARTITION_NAME                           NOTES
+---------------------------------------- ---------------------------------------------------------------------------------
+P2020                                    HYPERLOGLOG
+P2021                                    HYPERLOGLOG
+P2022                                    HYPERLOGLOG
+P2023                                    HYPERLOGLOG
+P2024                                    HYPERLOGLOG
+
+========================================
+GLOBAL stats have not been gathered
+yet because we gathered at the partition-level
+only - (look at the LAST_GATHERED dates and
+observe that the global-level stats are
+older than the stats on the partitions)
+========================================
+
+TABLE_NAME                               PARTITION_NAME                           STALE_S LAST_GATHERED
+---------------------------------------- ---------------------------------------- ------- -------------------
+SALES_DATA                               P2020                                    NO      2026-04-30 10:28:29
+SALES_DATA                               P2021                                    NO      2026-04-30 10:28:31
+SALES_DATA                               P2022                                    NO      2026-04-30 10:28:33
+SALES_DATA                               P2023                                    NO      2026-04-30 10:28:35
+SALES_DATA                               P2024                                    NO      2026-04-30 10:28:37
+SALES_DATA                                                                        NO      2026-04-30 10:28:07
+
+6 rows selected.
+
+SQL> @i4
+========================================
+Checking this again...
+
+GLOBAL stats have not been gathered
+yet because we gathered at the partition-level
+only - (look at the LAST_GATHERED dates and
+observe that the global-level stats are
+older than the stats on the partitions)
+========================================
+
+TABLE_NAME                               PARTITION_NAME                           STALE_S LAST_GATHERED
+---------------------------------------- ---------------------------------------- ------- -------------------
+SALES_DATA                               P2020                                    NO      2026-04-30 10:28:29
+SALES_DATA                               P2021                                    NO      2026-04-30 10:28:31
+SALES_DATA                               P2022                                    NO      2026-04-30 10:28:33
+SALES_DATA                               P2023                                    NO      2026-04-30 10:28:35
+SALES_DATA                               P2024                                    NO      2026-04-30 10:28:37
+SALES_DATA                                                                        NO      2026-04-30 10:28:07
+
+6 rows selected.
+
+========================================
+Sleep for a few seconds because we want
+to see a clear difference in LAST_GATHERED
+times
+========================================
+SQL> exec dbms_lock.sleep(10);
+
+PL/SQL procedure successfully completed.
+
+SQL> set echo off
+========================================
+Note the short time to process this step
+indicating that we are not scanning all
+rows in the table.
+
+If the table has indexes, this step will
+take longer, but we will still use
+synopses to reduce the overall gather time.
+
+For the purposes of illustration, and to make
+the synopses optimization  more obvious, no indexes
+in this test case.
+========================================
+SQL> exec dbms_stats.gather_table_stats(user,'sales_data',options=>'gather auto')
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:00.02
+SQL> set echo off
+========================================
+GLOBAL stats have been gathered using synopses
+(check the LAST_GATHERED time for the global
+stats - where partition_name is NULL)
+========================================
+
+TABLE_NAME                               PARTITION_NAME                           STALE_S LAST_GATHERED
+---------------------------------------- ---------------------------------------- ------- -------------------
+SALES_DATA                               P2020                                    NO      2026-04-30 10:28:29
+SALES_DATA                               P2021                                    NO      2026-04-30 10:28:31
+SALES_DATA                               P2022                                    NO      2026-04-30 10:28:33
+SALES_DATA                               P2023                                    NO      2026-04-30 10:28:35
+SALES_DATA                               P2024                                    NO      2026-04-30 10:28:37
+SALES_DATA                                                                        NO      2026-04-30 10:28:50
+
+6 rows selected.
+
+SQL> @i5
+========================================
+Make a single partition stale to check
+we continue to use synopses successfully
+========================================
+SQL> delete from sales_data partition (p2020);
+
+50000 rows deleted.
+
+SQL> exec dbms_stats.flush_database_monitoring_info;
+
+PL/SQL procedure successfully completed.
+
+SQL> set echo off
+========================================
+Check stale
+========================================
+
+TABLE_NAME                               PARTITION_NAME                           STALE_S   NUM_ROWS LAST_GATHERED
+---------------------------------------- ---------------------------------------- ------- ---------- -------------------
+SALES_DATA                               P2020                                    YES          50000 2026-04-30 10:28:29
+SALES_DATA                               P2021                                    NO           50000 2026-04-30 10:28:31
+SALES_DATA                               P2022                                    NO           50000 2026-04-30 10:28:33
+SALES_DATA                               P2023                                    NO           50000 2026-04-30 10:28:35
+SALES_DATA                               P2024                                    NO           50000 2026-04-30 10:28:37
+SALES_DATA                                                                        YES         250000 2026-04-30 10:28:50
+
+6 rows selected.
+
+========================================
+Sleep for a few seconds because we want
+to see a clear difference in LAST_GATHERED
+times
+========================================
+SQL> exec dbms_lock.sleep(10);
+
+PL/SQL procedure successfully completed.
+
+SQL> set echo off
+========================================
+Note the short time to process this step
+indicating that we are not scanning all
+rows in the table.
+========================================
+SQL> exec dbms_stats.gather_table_stats(user,'sales_data',options=>'gather auto')
+
+PL/SQL procedure successfully completed.
+
+Elapsed: 00:00:00.04
+SQL> set echo off
+========================================
+GLOBAL stats have been updated using synopses
+(compare NUM_ROWS with above)
+========================================
+
+TABLE_NAME                               PARTITION_NAME                           STALE_S   NUM_ROWS LAST_GATHERED
+---------------------------------------- ---------------------------------------- ------- ---------- -------------------
+SALES_DATA                               P2020                                    NO               0 2026-04-30 10:29:02
+SALES_DATA                               P2021                                    NO           50000 2026-04-30 10:28:31
+SALES_DATA                               P2022                                    NO           50000 2026-04-30 10:28:33
+SALES_DATA                               P2023                                    NO           50000 2026-04-30 10:28:35
+SALES_DATA                               P2024                                    NO           50000 2026-04-30 10:28:37
+SALES_DATA                                                                        NO          200000 2026-04-30 10:29:02
+
+6 rows selected.
+
+SQL> spool off
