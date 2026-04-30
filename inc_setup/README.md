@@ -1,4 +1,4 @@
-<h2>Converting a Table to Use Incremental Statstics<h2>
+<h2>Converting a Table to Use Incremental Statstics</h2>
 
 This demonstrates how you can migrate a partitioned table that isn't using incremental statistics management to one that does, without using a "big bang" approach. You can change DBMS_STATS preferences for the relevant table, gather partition-level statistics over a period of time and, finally, gather global-level statistics efficiently using the newly-created synopses.
 
