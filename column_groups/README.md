@@ -31,8 +31,10 @@ There are four demos:
 # Experimental script
 -  "corr_from_table.sql" will sample colums to see if they have correlated values. There are a number of caveats - see script for details.
 For example:
+<pre>
 SQL> Check myuser.mytable, sampling 100% of rows, and create the column groups immediately
 SQL> @corr_from_table myuser mytable 100 Y
+</pre>
 
 # Notes
 
