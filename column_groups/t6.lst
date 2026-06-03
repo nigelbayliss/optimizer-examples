@@ -1,27 +1,5 @@
+SQL> set echo on
 SQL> set feedback on
-SQL> 
-SQL> exec dbms_stats.gather_table_stats(user,'tab_corr1',no_invalidate=>false)
-
-PL/SQL procedure successfully completed.
-
-SQL> exec dbms_stats.gather_table_stats(user,'tab_corr2',no_invalidate=>false)
-
-PL/SQL procedure successfully completed.
-
-SQL> 
-SQL> select /* MY_TEST_QUERY */ sum(b.n0),count(*)
-  2  from  tab_corr1 a, tab_corr2 b
-  3  where a.n1 = 1
-  4  and   a.n2 = 1
-  5  and   a.n1 = b.n1
-  6  and   a.n2 = b.n2;
-
- SUM(B.N0)   COUNT(*)
----------- ----------
-      1000       1000
-
-1 row selected.
-
 SQL> 
 SQL> exec dbms_stats.gather_table_stats(user,'tab_corr1',no_invalidate=>false)
 
@@ -35,7 +13,7 @@ SQL>
 SQL> --
 SQL> -- Now we have column groups, the estimate should be 1000
 SQL> --
-SQL> select /* MY_TEST_QUERY */ sum(b.n0),count(*)
+SQL> select /* MY_TEST_QUERY */ /*+ GATHER_PLAN_STATISTICS */ sum(b.n0),count(*)
   2  from  tab_corr1 a, tab_corr2 b
   3  where a.n1 = 1
   4  and   a.n2 = 1
@@ -54,30 +32,30 @@ SQL> set linesize 200
 SQL> set trims on
 SQL> set tab off
 SQL> set pagesize 1000
-SQL> column plan_table_output format a100
+SQL> column plan_table_output format a180
 SQL> 
 SQL> SELECT *
-  2  FROM table(DBMS_XPLAN.DISPLAY_CURSOR(FORMAT=>'TYPICAL'));
+  2  FROM table(DBMS_XPLAN.DISPLAY_CURSOR(FORMAT=>'TYPICAL ALLSTATS LAST'));
 
 PLAN_TABLE_OUTPUT
-----------------------------------------------------------------------------------------------------
-SQL_ID  7kjpawwbyh1bz, child number 3
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  bu6pvfqz1cys2, child number 1
 -------------------------------------
-select /* MY_TEST_QUERY */ sum(b.n0),count(*) from  tab_corr1 a,
-tab_corr2 b where a.n1 = 1 and   a.n2 = 1 and   a.n1 = b.n1 and   a.n2
-= b.n2
+select /* MY_TEST_QUERY */ /*+ GATHER_PLAN_STATISTICS */
+sum(b.n0),count(*) from  tab_corr1 a, tab_corr2 b where a.n1 = 1 and
+a.n2 = 1 and   a.n1 = b.n1 and   a.n2 = b.n2
 
 Plan hash value: 3486445757
 
----------------------------------------------------------------------------------
-| Id  | Operation           | Name      | Rows  | Bytes | Cost (%CPU)| Time     |
----------------------------------------------------------------------------------
-|   0 | SELECT STATEMENT    |           |       |       |    18 (100)|          |
-|   1 |  SORT AGGREGATE     |           |     1 |    18 |            |          |
-|*  2 |   HASH JOIN         |           |  1000 | 18000 |    18   (0)| 00:00:01 |
-|*  3 |    TABLE ACCESS FULL| TAB_CORR2 |     1 |    12 |     9   (0)| 00:00:01 |
-|*  4 |    TABLE ACCESS FULL| TAB_CORR1 |  1000 |  6000 |     9   (0)| 00:00:01 |
----------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------------------------------
+| Id  | Operation           | Name      | Starts | E-Rows |E-Bytes| Cost (%CPU)| E-Time   | A-Rows |   A-Time   | Buffers |  OMem |  1Mem | Used-Mem |
+------------------------------------------------------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT    |           |      1 |        |       |    18 (100)|          |      1 |00:00:00.01 |      49 |       |       |          |
+|   1 |  SORT AGGREGATE     |           |      1 |      1 |    18 |            |          |      1 |00:00:00.01 |      49 |       |       |          |
+|*  2 |   HASH JOIN         |           |      1 |   1000 | 18000 |    18   (0)| 00:00:01 |   1000 |00:00:00.01 |      49 |  1797K|  1797K|  635K (0)|
+|*  3 |    TABLE ACCESS FULL| TAB_CORR2 |      1 |      1 |    12 |     9   (0)| 00:00:01 |      1 |00:00:00.01 |      26 |       |       |          |
+|*  4 |    TABLE ACCESS FULL| TAB_CORR1 |      1 |   1000 |  6000 |     9   (0)| 00:00:01 |   1000 |00:00:00.01 |      23 |       |       |          |
+------------------------------------------------------------------------------------------------------------------------------------------------------
 
 Predicate Information (identified by operation id):
 ---------------------------------------------------

@@ -13,8 +13,8 @@ PL/SQL procedure successfully completed.
 SQL> 
 SQL> create table tab_corr2 as
   2  select rownum n0,
-  3         rownum n1,
-  4         rownum n2
+  3  	    rownum n1,
+  4  	    rownum n2
   5  from   (select 1 from dual connect by rownum<10000);
 
 Table created.

@@ -8,12 +8,11 @@ SQL> select sql_id the_sqlid
 THE_SQLID
 -------------
 7kjpawwbyh1bz
-
-1 row selected.
+bu6pvfqz1cys2
 
 SQL> 
 SQL> define sqlid
-DEFINE SQLID           = "7kjpawwbyh1bz" (CHAR)
+DEFINE SQLID           = "bu6pvfqz1cys2" (CHAR)
 SQL> 
 SQL> @cg_from_sqlid &sqlid y
 SQL> --
@@ -25,8 +24,14 @@ SQL> --                N - spool a reation script to verify and run later
 SQL> --
 SQL> set long 100000
 SQL> 
+SQL> var create_now varchar2(1)
+SQL> 
+SQL> exec select decode(nvl(upper('&2'),'N'),'N','N','Y') into :create_now from dual;
+
+PL/SQL procedure successfully completed.
+
 SQL> --
-SQL> -- This assumes that the parse will complete within 10 seconds
+SQL> -- This assumes that the parse will complete within 10-1 seconds
 SQL> --
 SQL> exec dbms_stats.seed_col_usage(null,null,10)
 
@@ -36,18 +41,84 @@ SQL> exec dbms_lock.sleep(1)
 
 PL/SQL procedure successfully completed.
 
+SQL> 
+SQL> DECLARE
+  2    l_sql   CLOB;
+  3    l_cur   INTEGER;
+  4  BEGIN
+  5    SELECT sql_fulltext
+  6    INTO   l_sql
+  7    FROM   sys.GV_$SQLAREA
+  8    WHERE  sql_id = '&1'
+  9    AND    ROWNUM = 1;
+ 10  
+ 11    l_cur := dbms_sql.open_cursor;
+ 12  
+ 13    BEGIN
+ 14      dbms_sql.parse(l_cur, l_sql, dbms_sql.native);
+ 15      dbms_output.put_line('Parse succeeded');
+ 16    EXCEPTION
+ 17      WHEN OTHERS THEN
+ 18        dbms_output.put_line('Parse failed: ' || SQLERRM);
+ 19    END;
+ 20  
+ 21    dbms_sql.close_cursor(l_cur);
+ 22  END;
+ 23  /
+old   8:   WHERE  sql_id = '&1'
+new   8:   WHERE  sql_id = 'bu6pvfqz1cys2'
+
+PL/SQL procedure successfully completed.
+
+SQL> 
 SQL> --
-SQL> -- Parse the relevant SQL statement
+SQL> -- Create the column groups
 SQL> --
-SQL> @@explain &1
-SQL> --
-SQL> -- This script explains a SQL statement in the cursor cache
-SQL> -- NOTE - it will fail for very long SQL statements
-SQL> -- If you have a license to use SQL performance advisor, you
-SQL> -- can use that instead to parse SQL statements in the cursor
-SQL> -- cache.
-SQL> --
-SQL> set echo off
+SQL> exec dbms_stats.flush_database_monitoring_info;
+
+PL/SQL procedure successfully completed.
+
+SQL> exec dbms_lock.sleep(2)
+
+PL/SQL procedure successfully completed.
+
+SQL> 
+SQL> set serveroutput on
+SQL> declare
+  2    r clob;
+  3    cursor c1 is
+  4      select distinct object_name,object_owner
+  5      from   sys.GV_$SQL_PLAN
+  6      where  object_type = 'TABLE'
+  7      and    sql_id = '&1'
+  8      order by object_name;
+  9  begin
+ 10    for rec in c1
+ 11    loop
+ 12       r := dbms_stats.report_col_usage(rec.object_owner,rec.object_name) ;
+ 13       dbms_output.put_line('-- ===========================================================');
+ 14       dbms_output.put_line('--     Table Name  : '||rec.object_name);
+ 15       dbms_output.put_line('/*');
+ 16       dbms_output.put_line(r);
+ 17       dbms_output.put_line('*/');
+ 18       if :create_now = 'Y'
+ 19       then
+ 20          select dbms_stats.create_extended_stats(rec.object_owner,rec.object_name) into r from dual;
+ 21          dbms_output.put_line(r);
+ 22       else
+ 23          dbms_output.put_line('select dbms_stats.create_extended_stats('''||rec.object_owner||''','''||rec.object_name||''') es from dual;');
+ 24       end if;
+ 25    end loop;
+ 26    dbms_output.put_line('-- === Stats need to be regathered on the following tables');
+ 27    for rec in c1
+ 28    loop
+ 29       -- In theory, we could go ahead and gather stats here rather than just reporting the need.
+ 30       dbms_output.put_line('exec dbms_stats.gather_table_stats('''||rec.object_owner||''','''||rec.object_name||''',no_invalidate=>false)');
+ 31    end loop;
+ 32  end;
+ 33  /
+old   7:     and    sql_id = '&1'
+new   7:     and    sql_id = 'bu6pvfqz1cys2'
 -- ===========================================================
 --     Table Name  : TAB_CORR1
 /*
@@ -57,12 +128,13 @@ LEGEND:
 EQ         : Used in single table EQuality predicate
 RANGE      : Used in single table RANGE predicate
 LIKE       : Used in single table LIKE predicate
-NULL       : Used in single table is (not) NULL predicate
-EQ_JOIN    : Used in
-EQuality JOIN predicate
+NULL       : Used in single
+table is (not) NULL predicate
+EQ_JOIN    : Used in EQuality JOIN predicate
 NONEQ_JOIN : Used in NON EQuality JOIN predicate
 FILTER     : Used in single table FILTER predicate
-JOIN       : Used in JOIN predicate
+JOIN       : Used in JOIN
+predicate
 GROUP_BY   : Used in GROUP BY
 expression
 ...............................................................................
@@ -70,24 +142,24 @@ expression
 ###############################################################################
 
 COLUMN USAGE REPORT FOR
-TP25.TAB_CORR1
-......................................
+ADHOC.TAB_CORR1
+.......................................
 
 1. N1                                  : EQ EQ_JOIN                            
-2. N2                                  : EQ EQ_JOIN                            
-3. (N1, N2)
-: FILTER 
+2. N2                                  : EQ EQ_JOIN
+
+3. (N1, N2)                            : FILTER 
 ###############################################################################
 
 
 */
 ###############################################################################
 
-EXTENSIONS FOR TP25.TAB_CORR1
-.............................
+EXTENSIONS FOR ADHOC.TAB_CORR1
+..............................
 
-1. (N1, N2)                            : SYS_STUBZH0IHA7K$KEBJVXO5LOHAS
-created
+1. (N1, N2)                            :
+SYS_STUBZH0IHA7K$KEBJVXO5LOHAS created
 ###############################################################################
 
 
@@ -100,12 +172,13 @@ LEGEND:
 EQ         : Used in single table EQuality predicate
 RANGE      : Used in single table RANGE predicate
 LIKE       : Used in single table LIKE predicate
-NULL       : Used in single table is (not) NULL predicate
-EQ_JOIN    : Used in
-EQuality JOIN predicate
+NULL       : Used in single
+table is (not) NULL predicate
+EQ_JOIN    : Used in EQuality JOIN predicate
 NONEQ_JOIN : Used in NON EQuality JOIN predicate
 FILTER     : Used in single table FILTER predicate
-JOIN       : Used in JOIN predicate
+JOIN       : Used in JOIN
+predicate
 GROUP_BY   : Used in GROUP BY
 expression
 ...............................................................................
@@ -113,27 +186,34 @@ expression
 ###############################################################################
 
 COLUMN USAGE REPORT FOR
-TP25.TAB_CORR2
-......................................
+ADHOC.TAB_CORR2
+.......................................
 
 1. N1                                  : EQ EQ_JOIN                            
-2. N2                                  : EQ EQ_JOIN                            
-3. (N1, N2)
-: FILTER 
+2. N2                                  : EQ EQ_JOIN
+
+3. (N1, N2)                            : FILTER 
 ###############################################################################
 
 
 */
 ###############################################################################
 
-EXTENSIONS FOR TP25.TAB_CORR2
-.............................
+EXTENSIONS FOR ADHOC.TAB_CORR2
+..............................
 
-1. (N1, N2)                            : SYS_STUBZH0IHA7K$KEBJVXO5LOHAS
-created
+1. (N1, N2)                            :
+SYS_STUBZH0IHA7K$KEBJVXO5LOHAS created
 ###############################################################################
 
 
 -- === Stats need to be regathered on the following tables
-exec dbms_stats.gather_table_stats('TP25','TAB_CORR1')
-exec dbms_stats.gather_table_stats('TP25','TAB_CORR2')
+exec dbms_stats.gather_table_stats('ADHOC','TAB_CORR1',no_invalidate=>false)
+exec dbms_stats.gather_table_stats('ADHOC','TAB_CORR2',no_invalidate=>false)
+
+PL/SQL procedure successfully completed.
+
+SQL> set serveroutput off
+SQL> 
+SQL> 
+SQL> spool off

@@ -1,69 +1,51 @@
-SQL> 
-SQL> exec dbms_stats.set_table_prefs(user,'tab_corr1','publish','false')
-SQL> exec dbms_stats.set_table_prefs(user,'tab_corr2','publish','false')
-SQL> exec dbms_stats.gather_table_stats(user,'tab_corr1',no_invalidate=>false);
-SQL> exec dbms_stats.gather_table_stats(user,'tab_corr2',no_invalidate=>false);
+SQL> set echo on
 SQL> 
 SQL> --
-SQL> -- This query won't see the new statistics because they are not published
-SQL> -- so the cardinality estimate will still be wrong (100)
+SQL> -- One way of gathering extended stats
 SQL> --
-SQL> select /* MY_TEST_QUERY */ sum(b.n0),count(*)
-  2  from  tab_corr1 a, tab_corr2 b
-  3  where a.n1 = 1
-  4  and   a.n2 = 1
-  5  and   a.n1 = b.n1
-  6  and   a.n2 = b.n2;
+SQL> @@gather_ext
+SQL> --
+SQL> -- Gathers statistics on
+SQL> -- extended statistics that don't yet have stats
+SQL> --
+SQL> set serveroutput on
+SQL> declare
+  2     cursor ext is
+  3        select a.table_name,a.extension
+  4        from   user_stat_extensions a,
+  5               user_tab_col_statistics b
+  6        where  a.table_name = b.table_name (+)
+  7        and    a.extension_name = b.column_name (+)
+  8        and    b.last_analyzed is null
+  9        order by table_name;
+ 10     cmd varchar2(4096);
+ 11  begin
+ 12     for rec in ext
+ 13     loop
+ 14        cmd := 'begin  dbms_stats.gather_table_stats(user,'''||rec.table_name||''',method_opt=>''for columns '||rec.extension||''',no_invalidate=>false); end;';
+ 15        dbms_output.put_line(cmd);
+ 16        execute immediate cmd;
+ 17     end loop;
+ 18  end;
+ 19  /
+begin  dbms_stats.gather_table_stats(user,'TAB_CORR1',method_opt=>'for columns ("N1","N2")',no_invalidate=>false); end;
+begin  dbms_stats.gather_table_stats(user,'TAB_CORR2',method_opt=>'for columns ("N1","N2")',no_invalidate=>false); end;
 
- SUM(B.N0)   COUNT(*)
----------- ----------
-      1000       1000
-SQL> 
-SQL> @@plan
-SQL> set linesize 200
-SQL> set trims on
-SQL> set tab off
-SQL> set pagesize 1000
-SQL> column plan_table_output format a100
-SQL> 
-SQL> SELECT *
-  2  FROM table(DBMS_XPLAN.DISPLAY_CURSOR(FORMAT=>'TYPICAL'));
+PL/SQL procedure successfully completed.
 
-PLAN_TABLE_OUTPUT
-----------------------------------------------------------------------------------------------------
-SQL_ID  7kjpawwbyh1bz, child number 2
--------------------------------------
-select /* MY_TEST_QUERY */ sum(b.n0),count(*) from  tab_corr1 a,
-tab_corr2 b where a.n1 = 1 and   a.n2 = 1 and   a.n1 = b.n1 and   a.n2
-= b.n2
-
-Plan hash value: 3486445757
-
----------------------------------------------------------------------------------
-| Id  | Operation           | Name      | Rows  | Bytes | Cost (%CPU)| Time     |
----------------------------------------------------------------------------------
-|   0 | SELECT STATEMENT    |           |       |       |    18 (100)|          |
-|   1 |  SORT AGGREGATE     |           |     1 |    18 |            |          |
-|*  2 |   HASH JOIN         |           |     1 |    18 |    18   (0)| 00:00:01 |
-|*  3 |    TABLE ACCESS FULL| TAB_CORR2 |     1 |    12 |     9   (0)| 00:00:01 |
-|*  4 |    TABLE ACCESS FULL| TAB_CORR1 |   100 |   600 |     9   (0)| 00:00:01 |
----------------------------------------------------------------------------------
-
-Predicate Information (identified by operation id):
----------------------------------------------------
-
-   2 - access("A"."N1"="B"."N1" AND "A"."N2"="B"."N2")
-   3 - filter(("B"."N1"=1 AND "B"."N2"=1))
-   4 - filter(("A"."N1"=1 AND "A"."N2"=1))
-
+SQL> set serveroutput off
+SQL> --
+SQL> -- Alternatively you can do this
+SQL> --
+SQL> --exec dbms_stats.gather_table_stats(user,'tab_corr1',no_invalidate=>false);
+SQL> --exec dbms_stats.gather_table_stats(user,'tab_corr2',no_invalidate=>false);
 SQL> 
 SQL> --
 SQL> -- Expose the next query to the column group statistics
 SQL> -- and the cardinality estimate will be correct (1000)
 SQL> --
-SQL> alter session set OPTIMIZER_USE_PENDING_STATISTICS = TRUE;
 SQL> 
-SQL> select /* MY_TEST_QUERY */ sum(b.n0),count(*)
+SQL> select /* MY_TEST_QUERY */ /*+ GATHER_PLAN_STATISTICS */ sum(b.n0),count(*)
   2  from  tab_corr1 a, tab_corr2 b
   3  where a.n1 = 1
   4  and   a.n2 = 1
@@ -73,36 +55,37 @@ SQL> select /* MY_TEST_QUERY */ sum(b.n0),count(*)
  SUM(B.N0)   COUNT(*)
 ---------- ----------
       1000       1000
+
 SQL> 
 SQL> @@plan
 SQL> set linesize 200
 SQL> set trims on
 SQL> set tab off
 SQL> set pagesize 1000
-SQL> column plan_table_output format a100
+SQL> column plan_table_output format a180
 SQL> 
 SQL> SELECT *
-  2  FROM table(DBMS_XPLAN.DISPLAY_CURSOR(FORMAT=>'TYPICAL'));
+  2  FROM table(DBMS_XPLAN.DISPLAY_CURSOR(FORMAT=>'TYPICAL ALLSTATS LAST'));
 
 PLAN_TABLE_OUTPUT
-----------------------------------------------------------------------------------------------------
-SQL_ID  7kjpawwbyh1bz, child number 3
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+SQL_ID  bu6pvfqz1cys2, child number 1
 -------------------------------------
-select /* MY_TEST_QUERY */ sum(b.n0),count(*) from  tab_corr1 a,
-tab_corr2 b where a.n1 = 1 and   a.n2 = 1 and   a.n1 = b.n1 and   a.n2
-= b.n2
+select /* MY_TEST_QUERY */ /*+ GATHER_PLAN_STATISTICS */
+sum(b.n0),count(*) from  tab_corr1 a, tab_corr2 b where a.n1 = 1 and
+a.n2 = 1 and   a.n1 = b.n1 and   a.n2 = b.n2
 
 Plan hash value: 3486445757
 
----------------------------------------------------------------------------------
-| Id  | Operation           | Name      | Rows  | Bytes | Cost (%CPU)| Time     |
----------------------------------------------------------------------------------
-|   0 | SELECT STATEMENT    |           |       |       |    18 (100)|          |
-|   1 |  SORT AGGREGATE     |           |     1 |    18 |            |          |
-|*  2 |   HASH JOIN         |           |  1000 | 18000 |    18   (0)| 00:00:01 |
-|*  3 |    TABLE ACCESS FULL| TAB_CORR2 |     1 |    12 |     9   (0)| 00:00:01 |
-|*  4 |    TABLE ACCESS FULL| TAB_CORR1 |  1000 |  6000 |     9   (0)| 00:00:01 |
----------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------------------------------
+| Id  | Operation           | Name      | Starts | E-Rows |E-Bytes| Cost (%CPU)| E-Time   | A-Rows |   A-Time   | Buffers |  OMem |  1Mem | Used-Mem |
+------------------------------------------------------------------------------------------------------------------------------------------------------
+|   0 | SELECT STATEMENT    |           |      1 |        |       |    18 (100)|          |      1 |00:00:00.01 |      49 |       |       |          |
+|   1 |  SORT AGGREGATE     |           |      1 |      1 |    18 |            |          |      1 |00:00:00.01 |      49 |       |       |          |
+|*  2 |   HASH JOIN         |           |      1 |   1000 | 18000 |    18   (0)| 00:00:01 |   1000 |00:00:00.01 |      49 |  1797K|  1797K|  700K (0)|
+|*  3 |    TABLE ACCESS FULL| TAB_CORR2 |      1 |      1 |    12 |     9   (0)| 00:00:01 |      1 |00:00:00.01 |      26 |       |       |          |
+|*  4 |    TABLE ACCESS FULL| TAB_CORR1 |      1 |   1000 |  6000 |     9   (0)| 00:00:01 |   1000 |00:00:00.01 |      23 |       |       |          |
+------------------------------------------------------------------------------------------------------------------------------------------------------
 
 Predicate Information (identified by operation id):
 ---------------------------------------------------
@@ -111,63 +94,8 @@ Predicate Information (identified by operation id):
    3 - filter(("B"."N1"=1 AND "B"."N2"=1))
    4 - filter(("A"."N1"=1 AND "A"."N2"=1))
 
-SQL> 
-SQL> --
-SQL> -- Let's go ahead an publish
-SQL> --
-SQL> exec dbms_stats.publish_pending_stats(user,'tab_corr1')
-SQL> exec dbms_stats.publish_pending_stats(user,'tab_corr2')
-SQL> alter session set OPTIMIZER_USE_PENDING_STATISTICS = FALSE;
-SQL> exec dbms_stats.set_table_prefs(user,'tab_corr1','publish','true')
-SQL> exec dbms_stats.set_table_prefs(user,'tab_corr2','publish','true')
-SQL> 
-SQL> select /* PEND_FALSE MY_TEST_QUERY */ sum(b.n0),count(*)
-  2  from  tab_corr1 a, tab_corr2 b
-  3  where a.n1 = 1
-  4  and   a.n2 = 1
-  5  and   a.n1 = b.n1
-  6  and   a.n2 = b.n2;
 
- SUM(B.N0)   COUNT(*)
----------- ----------
-      1000       1000
-SQL> 
-SQL> @@plan
-SQL> set linesize 200
-SQL> set trims on
-SQL> set tab off
-SQL> set pagesize 1000
-SQL> column plan_table_output format a100
-SQL> 
-SQL> SELECT *
-  2  FROM table(DBMS_XPLAN.DISPLAY_CURSOR(FORMAT=>'TYPICAL'));
-
-PLAN_TABLE_OUTPUT
-----------------------------------------------------------------------------------------------------
-SQL_ID  6f7fkus5pbcj6, child number 0
--------------------------------------
-select /* PEND_FALSE MY_TEST_QUERY */ sum(b.n0),count(*) from
-tab_corr1 a, tab_corr2 b where a.n1 = 1 and   a.n2 = 1 and   a.n1 =
-b.n1 and   a.n2 = b.n2
-
-Plan hash value: 3486445757
-
----------------------------------------------------------------------------------
-| Id  | Operation           | Name      | Rows  | Bytes | Cost (%CPU)| Time     |
----------------------------------------------------------------------------------
-|   0 | SELECT STATEMENT    |           |       |       |    18 (100)|          |
-|   1 |  SORT AGGREGATE     |           |     1 |    18 |            |          |
-|*  2 |   HASH JOIN         |           |  1000 | 18000 |    18   (0)| 00:00:01 |
-|*  3 |    TABLE ACCESS FULL| TAB_CORR2 |     1 |    12 |     9   (0)| 00:00:01 |
-|*  4 |    TABLE ACCESS FULL| TAB_CORR1 |  1000 |  6000 |     9   (0)| 00:00:01 |
----------------------------------------------------------------------------------
-
-Predicate Information (identified by operation id):
----------------------------------------------------
-
-   2 - access("A"."N1"="B"."N1" AND "A"."N2"="B"."N2")
-   3 - filter(("B"."N1"=1 AND "B"."N2"=1))
-   4 - filter(("A"."N1"=1 AND "A"."N2"=1))
+25 rows selected.
 
 SQL> 
 SQL> spool off

@@ -1,6 +1,6 @@
 --
--- Write out a script to gathers statistics on
--- extended statistics that are missing gathered stats
+-- Gathers statistics on
+-- extended statistics that don't yet have stats
 --
 set serveroutput on
 declare
@@ -12,10 +12,13 @@ declare
       and    a.extension_name = b.column_name (+)
       and    b.last_analyzed is null
       order by table_name;
+   cmd varchar2(4096);
 begin
    for rec in ext
    loop
-      dbms_output.put_line('exec dbms_stats.gather_table_stats(user,'''||rec.table_name||''',method_opt=>''for columns '||rec.extension||''')');
+      cmd := 'begin  dbms_stats.gather_table_stats(user,'''||rec.table_name||''',method_opt=>''for columns '||rec.extension||''',no_invalidate=>false); end;';
+      dbms_output.put_line(cmd);
+      execute immediate cmd;
    end loop;
 end;
 /

@@ -1,6 +1,5 @@
 --
--- Creates column groups for a parsed SQL statement
--- where the plan is available in the PLAN_TABLE
+-- Creates column groups for SQL statements in a SQL Tuning Set
 -- Parameter:
 --     Y/N where Y - will create the column groups immediately
 --               N - will print the column group creation script only 
