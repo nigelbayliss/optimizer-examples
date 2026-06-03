@@ -28,6 +28,12 @@ There are four demos:
 -  "cg_from_sts.sql" create column groups for SQL statements in a SQL tuning set
 -  "cg_from_plan.sql" create column groups for a SQL statement parsed with EXPLAIN PLAN (you must enable seeding before the explain plan)
 
+# Experimental script
+-  "corr_from_table.sql" will sample colums to see if they have correlated values. There are a number of caveats - see script for details.
+For example:
+SQL> Check myuser.mytable, sampling 100% of rows, and create the column groups immediately
+SQL> @corr_from_table myuser mytable 100 Y
+
 # Notes
 
 There used to be more example scripts, but I've removed them for now. They were useful, but not mathematically sound. I will return to them at a later date to see if I can resolve this issue.
