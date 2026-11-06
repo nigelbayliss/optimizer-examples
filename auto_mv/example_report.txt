@@ -1,14 +1,3 @@
-SQL> select DBMS_AUTO_MV.REPORT_LAST_ACTIVITY (level=>'ALL') rep from dual;
-ERROR:
-ORA-00942: table or view "SYS"."SWAT_VER$" does not exist
-ORA-06512: at "SYS.DBMS_SWAT", line 1628
-ORA-06512: at "SYS.DBMS_SWAT", line 1610
-ORA-06512: at line 1
-
-
-
-no rows selected
-
 SQL> 
 SQL> select DBMS_AUTO_MV.REPORT_ACTIVITY (level=>'ALL') rep from dual;
 AUTO MV REPORT
