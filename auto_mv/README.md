@@ -1,9 +1,10 @@
 # Auto MV Example
 
-Example auto MV report.
+Example auto MV report: example_report.txt
 
-TODO: Example SQL script for demonstrating Auto MV in Oracle Autonomous Database
+Script runnable in Oracle Autonomous Database user ADMIN: auto_mv_example.sql
 
+Script to drop MVs and test schema: drop.sql
 
 ### DISCLAIMER:
 - These scripts are provided for educational purposes only.
